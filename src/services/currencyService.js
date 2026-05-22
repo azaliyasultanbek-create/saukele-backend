@@ -223,3 +223,15 @@ function snapshotRate(fromCurrency, toCurrency, amount = null) {
         : null,
   };
 }
+
+module.exports = {
+  SUPPORTED_CURRENCIES,
+  BASE_CURRENCY,
+  getSupportedCurrencies,
+  isCurrencySupported,
+  refreshRates,
+  getRate,
+  convert,
+  formatAmount,
+  snapshotRate,
+};

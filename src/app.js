@@ -17,11 +17,11 @@ app.get("/", (req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 const authLimiter = rateLimit({
-windowMs: 15 * 60 * 1000,
+windowMs: 2 * 60 * 1000,
 max: 5, 
   message: {
     code: 'TOO_MANY_REQUESTS',
-    message: 'Too many login/register attempts. Please try again after 15 minutes.',
+    message: 'Too many login/register attempts. Please try again after 2 minutes.',
     timestamp: new Date().toISOString()
   },
   skipSuccessfulRequests: true 
