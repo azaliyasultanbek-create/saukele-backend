@@ -15,7 +15,7 @@ async function check() {
 
   if (recent.length === 0) {
     console.log('Нет взносов за последние 5 минут');
-    // Проверим все взносы
+    
     const all = await prisma.contribution.findMany({
       take: 3,
       orderBy: { timestamp: 'desc' },

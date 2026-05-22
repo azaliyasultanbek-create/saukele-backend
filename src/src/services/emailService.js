@@ -3,9 +3,7 @@ const env = require('../config/env');
 
 let transporter = null;
 
-/**
- * Создать или получить Gmail SMTP transporter
- */
+
 function getTransporter() {
   if (transporter) return transporter;
 
@@ -28,9 +26,7 @@ function getTransporter() {
   return transporter;
 }
 
-/**
- * Проверить, что SMTP настроен правильно
- */
+
 function isSmtpReady() {
   return Boolean(
     env.smtpUser &&
@@ -41,9 +37,7 @@ function isSmtpReady() {
   );
 }
 
-/**
- * Отправить письмо через Gmail SMTP (или заглушку, если не настроен)
- */
+
 async function sendMail({ to, subject, text, html }) {
   const t = getTransporter();
 
@@ -81,9 +75,6 @@ async function sendMail({ to, subject, text, html }) {
   }
 }
 
-/**
- * Шаблон письма с кодом верификации
- */
 function getVerificationHtml(code) {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

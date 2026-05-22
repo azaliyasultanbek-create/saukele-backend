@@ -18,7 +18,7 @@ async function check() {
     console.log('  ' + c.timestamp.toLocaleString() + ' | ' + (c.guest.fullName || '?') + ' (' + (c.guest.email || 'нет email') + ') | ' + c.gift.name + ' | ' + c.originalAmount + ' ' + c.currencyUsed + ' | статус=' + c.status);
   }
 
-  // Семейное дерево
+  
   for (const coupleId of [10, 11]) {
     const family = await prisma.familyTree.findMany({
       where: { coupleId },

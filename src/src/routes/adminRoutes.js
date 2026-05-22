@@ -28,19 +28,17 @@ function requireAdminApiKey(req, res, next) {
   next();
 }
 
-// Поддержка двух способов аутентификации:
-// 1. JWT токен с ролью admin (для фронтенда)
-// 2. API-ключ через x-admin-api-key (для внешних интеграций)
+
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization;
   const apiKey = req.headers['x-admin-api-key'];
 
-  // Если есть API-ключ — проверяем его
+ 
   if (apiKey) {
     return requireAdminApiKey(req, res, next);
   }
 
-  // Иначе — проверяем JWT с ролью admin
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authenticate(req, res, (err) => {
       if (err) return err;
@@ -55,7 +53,7 @@ function requireAdmin(req, res, next) {
   });
 }
 
-// Очереди
+
 router.get('/queues', requireAdmin, async (req, res) => {
   const emailCounts = await emailQueue.getJobCounts(
     'waiting',
@@ -74,16 +72,16 @@ router.get('/queues', requireAdmin, async (req, res) => {
   });
 });
 
-// Статистика
+
 router.get('/stats', requireAdmin, adminGetStats);
 
-// Управление свадьбами
+
 router.get('/weddings', requireAdmin, adminGetAllWeddings);
 router.get('/weddings/:coupleId', requireAdmin, adminGetWeddingDetails);
 router.put('/weddings/:coupleId', requireAdmin, adminUpdateWedding);
 router.delete('/weddings/:coupleId', requireAdmin, adminDeleteWedding);
 
-// Управление пользователями
+
 router.get('/users', requireAdmin, adminGetUsers);
 router.put('/users/:userId', requireAdmin, adminUpdateUser);
 

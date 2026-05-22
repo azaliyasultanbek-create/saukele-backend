@@ -3,8 +3,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const nodemailer = require('nodemailer');
 
 async function main() {
-  // Отправим письмо с русской темой и содержанием 
-  // с отметкой важности (high priority)
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: 587,
@@ -37,7 +36,7 @@ async function main() {
   console.log('Accepted:', info.accepted);
   console.log('Response:', info.response);
   
-  // Теперь отправим второе письмо — прямо как из familyController
+  
   console.log('\n--- Отправка как из familyController ---\n');
   
   const info2 = await transporter.sendMail({

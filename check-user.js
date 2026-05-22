@@ -1,4 +1,4 @@
-// Запуск: node check-user.js <телефон>
+
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 
@@ -21,7 +21,7 @@ async function main() {
   console.log(`   Роль: ${user.role}`);
   console.log(`   passwordHash (первые 40 символов): ${user.passwordHash.substring(0, 40)}...`);
 
-  // Проверяем тестовый пароль
+ 
   const testPassword = process.argv[3];
   if (testPassword) {
     const match = await bcrypt.compare(testPassword, user.passwordHash);

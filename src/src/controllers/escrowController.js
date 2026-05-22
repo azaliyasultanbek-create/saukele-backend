@@ -15,29 +15,20 @@ const {
   calculateDeliveryComplexity,
 } = require('../services/handlingFlagsService');
 
-// ─── Purchase a gift (funded → purchased) ─────────────────────────────────
 
-/**
- * Couple purchases a funded gift.
- * This transitions the gift from funded → purchased.
- * All completed contributions must be escrow-approved first.
- */
 async function purchaseGift(req, res) {
   const { giftId } = req.params;
   const coupleId = req.user.id;
 
   try {
-    // Optional: first approve all unapproved contributions
     await approveAllContributions(parseInt(giftId), coupleId);
 
-    // Then transition the gift
     const updatedGift = await transitionGift(
       parseInt(giftId),
       'purchased',
       { expectedVersion: req.body.expectedVersion }
     );
 
-    // ── Оркестрационные данные из state machine ──────────────────
     const orchestration = updatedGift._logisticsOrchestration;
 
     res.json({
@@ -56,7 +47,6 @@ async function purchaseGift(req, res) {
         packagingRequirements: getPackagingRequirements(updatedGift.handlingFlags || []),
         updatedAt: updatedGift.updatedAt,
 
-        // ═══ НОВОЕ: Динамическая оркестрация флагов при покупке ═══
         logisticsOrchestration: orchestration ? {
           stage: orchestration.stage,
           stageInfo: orchestration.stageInfo,
@@ -111,13 +101,6 @@ async function purchaseGift(req, res) {
   }
 }
 
-// ─── Deliver a gift (purchased → delivered) ──────────────────────────────
-
-/**
- * Couple confirms delivery of a gift.
- * This transitions the gift from purchased → delivered.
- * This is a terminal state.
- */
 async function deliverGift(req, res) {
   const { giftId } = req.params;
   const coupleId = req.user.id;
@@ -128,7 +111,6 @@ async function deliverGift(req, res) {
       'delivered'
     );
 
-    // ── Оркестрационные данные из state machine ──────────────────
     const orchestration = updatedGift._logisticsOrchestration;
 
     res.json({
@@ -147,7 +129,6 @@ async function deliverGift(req, res) {
         packagingRequirements: getPackagingRequirements(updatedGift.handlingFlags || []),
         updatedAt: updatedGift.updatedAt,
 
-        // ═══ НОВОЕ: Полный отчёт динамической оркестрации ══════════
         logisticsOrchestration: orchestration ? {
           stage: orchestration.stage,
           stageInfo: orchestration.stageInfo,
@@ -188,11 +169,6 @@ async function deliverGift(req, res) {
   }
 }
 
-// ─── Approve a single contribution for escrow release ────────────────────
-
-/**
- * Couple approves a specific contribution for escrow release.
- */
 async function approveSingleContribution(req, res) {
   const { contributionId } = req.params;
   const coupleId = req.user.id;
@@ -245,8 +221,6 @@ async function approveSingleContribution(req, res) {
   }
 }
 
-// ─── Get escrow status for a gift ────────────────────────────────────────
-
 async function getEscrowStatus(req, res) {
   const { giftId } = req.params;
   const userId = req.user.id;
@@ -283,7 +257,6 @@ async function getEscrowStatus(req, res) {
       });
     }
 
-    // Only couple and admins can see escrow details
     const isOwner = req.user.role === 'couple' && gift.coupleId === userId;
     const isAdmin = req.user.role === 'admin';
 
@@ -300,7 +273,6 @@ async function getEscrowStatus(req, res) {
     const totalPending = gift.contributions.filter(c => c.escrowApprovedAt === null)
       .reduce((sum, c) => sum + c.amount, 0);
 
-    // ── Оркестрационные данные ────────────────────────────────────
     const flags = gift.handlingFlags || [];
     const lifecycleInfo = orchestrateLifecycleFlags({
       flags,
@@ -327,7 +299,6 @@ async function getEscrowStatus(req, res) {
         currency: gift.currency,
       },
 
-      // ═══ НОВОЕ: Актуальные оркестрационные данные для текущего статуса ═══
       logisticsOrchestration: {
         stage: lifecycleInfo.stage,
         stageInfo: lifecycleInfo.stageInfo,

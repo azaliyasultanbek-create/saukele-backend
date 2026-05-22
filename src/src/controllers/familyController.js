@@ -6,8 +6,6 @@ const TIER_CATEGORY_MAP = {
   zhien_zaran: 'ZHIEN_ZhARAN',
   kuda_zhekzhen: 'KUDA_ZHEKZhEN'
 };
-
-// Иерархия видимости: ата-ана видит всё, жиен-жаран видит ZhIEN и KUDA, құда-жекжең видит только KUDA
 const TIER_VISIBILITY = {
   ata_ana: ['ATA_ANA', 'ZHIEN_ZhARAN', 'KUDA_ZHEKZhEN'],
   zhien_zaran: ['ZHIEN_ZhARAN', 'KUDA_ZHEKZhEN'],
@@ -54,7 +52,6 @@ async function addFamilyMember(req, res) {
       });
     }
 
-    // Если передан parentId — проверяем, что он принадлежит этой же паре
     if (parentId) {
       const parentEntry = await prisma.familyTree.findFirst({
         where: { id: parentId, coupleId }
@@ -87,7 +84,6 @@ async function addFamilyMember(req, res) {
       }
     });
     
-    // Загружаем гостя с полным именем для ответа
     const fullGuest = await prisma.user.findUnique({
       where: { id: guest.id },
       select: { fullName: true }
@@ -153,16 +149,6 @@ async function getMyKinship(req, res) {
   }
 }
 
-/**
- * Строит иерархическое генеалогическое древо через рекурсивный CTE (WITH RECURSIVE)
- * 
- * Поскольку Prisma ORM не поддерживает WITH RECURSIVE нативно,
- * используется $queryRawUnsafe — это единственное место в проекте
- * с raw SQL, оправданное отсутствием поддержки рекурсивных CTE в ORM.
- * 
- * Запрос строит дерево от корневых узлов (parent_id IS NULL)
- * до всех потомков, группируя по категории родства.
- */
 async function getFamilyTree(req, res) {
   const coupleId = parseInt(req.params.coupleId, 10);
   
@@ -175,7 +161,7 @@ async function getFamilyTree(req, res) {
   }
 
   try {
-    // Проверяем, что свадьба существует
+    
     const wedding = await prisma.coupleProfile.findUnique({
       where: { coupleId },
       include: {
@@ -193,79 +179,62 @@ async function getFamilyTree(req, res) {
       });
     }
 
-    // Рекурсивный CTE: строим всё дерево родственников этой пары
-    const tree = await prisma.$queryRawUnsafe(`
-      WITH RECURSIVE family_recursive AS (
-        -- Базовый случай: корневые узлы (без родителя)
-        SELECT
-          ft.id,
-          ft.couple_id,
-          ft.guest_id,
-          ft.kinship_tier,
-          ft.category,
-          ft.parent_id,
-          ft.created_at,
-          u.full_name AS guest_name,
-          u.phone AS guest_phone,
-          0 AS depth,
-          CAST(ft.id AS TEXT) AS path
-        FROM family_tree ft
-        JOIN users u ON u.id = ft.guest_id
-        WHERE ft.couple_id = $1 AND ft.parent_id IS NULL
+    const familyEntries = await prisma.familyTree.findMany({
+      where: { coupleId },
+      include: {
+        guest: {
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
 
-        UNION ALL
-
-        -- Рекурсивный случай: дети
-        SELECT
-          ft.id,
-          ft.couple_id,
-          ft.guest_id,
-          ft.kinship_tier,
-          ft.category,
-          ft.parent_id,
-          ft.created_at,
-          u.full_name AS guest_name,
-          u.phone AS guest_phone,
-          fr.depth + 1 AS depth,
-          fr.path || ',' || CAST(ft.id AS TEXT) AS path
-        FROM family_tree ft
-        JOIN users u ON u.id = ft.guest_id
-        JOIN family_recursive fr ON ft.parent_id = fr.id
-        WHERE ft.couple_id = $1
-      )
-      SELECT * FROM family_recursive
-      ORDER BY path
-    `, coupleId);
-
-    // Преобразуем плоский результат в иерархическое дерево
+  
     const nodeMap = new Map();
     const roots = [];
 
-    for (const row of tree) {
+   
+    for (const entry of familyEntries) {
       const node = {
-        id: row.id,
-        guestId: row.guest_id,
-        guestName: row.guest_name,
-        guestPhone: row.guest_phone,
-        kinshipTier: row.kinship_tier,
-        category: row.category,
-        parentId: row.parent_id,
-        depth: row.depth,
-        children: []
+        id: entry.id,
+        guestId: entry.guestId,
+        guestName: entry.guest.fullName,
+        guestPhone: entry.guest.phone,
+        kinshipTier: entry.kinshipTier,
+        category: entry.category,
+        parentId: entry.parentId,
+        depth: 0, // будет вычислено ниже
+        children: [],
       };
-      nodeMap.set(row.id, node);
+      nodeMap.set(entry.id, node);
     }
 
-    for (const row of tree) {
-      const node = nodeMap.get(row.id);
-      if (row.parent_id && nodeMap.has(row.parent_id)) {
-        nodeMap.get(row.parent_id).children.push(node);
-      } else if (!row.parent_id) {
+   
+    const computeDepth = (node, depth) => {
+      node.depth = depth;
+      for (const child of node.children) {
+        computeDepth(child, depth + 1);
+      }
+    };
+
+    for (const entry of familyEntries) {
+      const node = nodeMap.get(entry.id);
+      if (entry.parentId && nodeMap.has(entry.parentId)) {
+        nodeMap.get(entry.parentId).children.push(node);
+      } else {
+        
         roots.push(node);
       }
     }
 
-    // Группировка по категориям
+    for (const root of roots) {
+      computeDepth(root, 0);
+    }
+
     const groupedByCategory = {
       ATA_ANA: {
         category: 'ATA_ANA',
@@ -284,22 +253,22 @@ async function getFamilyTree(req, res) {
       }
     };
 
-    for (const row of tree) {
-      const cat = row.category;
+    for (const entry of familyEntries) {
+      const cat = entry.category;
       if (groupedByCategory[cat]) {
+        const node = nodeMap.get(entry.id);
         groupedByCategory[cat].members.push({
-          id: row.id,
-          guestId: row.guest_id,
-          guestName: row.guest_name,
-          guestPhone: row.guest_phone,
-          kinshipTier: row.kinship_tier,
-          parentId: row.parent_id,
-          depth: row.depth
+          id: entry.id,
+          guestId: entry.guestId,
+          guestName: entry.guest.fullName,
+          guestPhone: entry.guest.phone,
+          kinshipTier: entry.kinshipTier,
+          parentId: entry.parentId,
+          depth: node ? node.depth : 0,
         });
       }
     }
 
-    // Также загружаем реестры родства (категории традиций)
     const registries = await prisma.kinshipRegistry.findMany({
       where: { coupleId },
       orderBy: { sortOrder: 'asc' }
@@ -315,7 +284,7 @@ async function getFamilyTree(req, res) {
       groupedByCategory: Object.values(groupedByCategory),
       registries,
       meta: {
-        totalMembers: tree.length,
+        totalMembers: familyEntries.length,
         categories: {
           ATA_ANA: groupedByCategory.ATA_ANA.members.length,
           ZHIEN_ZhARAN: groupedByCategory.ZHIEN_ZhARAN.members.length,
@@ -333,9 +302,6 @@ async function getFamilyTree(req, res) {
   }
 }
 
-/**
- * Управление реестром родства (традиционные категории)
- */
 async function createRegistryEntry(req, res) {
   const { name, description, category, parentId } = req.body;
   const coupleId = req.user.id;
@@ -405,7 +371,6 @@ async function getRegistry(req, res) {
       orderBy: { sortOrder: 'asc' }
     });
 
-    // Строим дерево реестра
     const buildTree = (parentId = null) =>
       entries
         .filter(e => e.parentId === parentId)
@@ -460,7 +425,6 @@ async function getGiftsByKinship(req, res) {
     const userTier = familyEntry.kinshipTier;
     const userCategory = familyEntry.category;
     
-    // Определяем, какие категории видны пользователю
     const visibleCategories = TIER_VISIBILITY[userTier] || [userCategory];
 
     const allGifts = await prisma.gift.findMany({
@@ -471,8 +435,6 @@ async function getGiftsByKinship(req, res) {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Фильтр: подарок доступен, если allowedTiers содержит tier пользователя
-    // или если категория подарка совпадает с видимыми категориями
     const visibleGifts = allGifts.filter((gift) => {
       if (!Array.isArray(gift.allowedTiers)) return false;
       return gift.allowedTiers.includes(userTier);

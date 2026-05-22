@@ -1,18 +1,12 @@
-/**
- * Проверка: почему не приходит уведомление о прогрессе?
- *
- * Запуск: node test-check-funding-flow.js
- */
+
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function check() {
-  console.log('\n═══════════════════════════════════════════');
-  console.log('  ПРОВЕРКА УВЕДОМЛЕНИЙ О ПРОГРЕССЕ');
-  console.log('═══════════════════════════════════════════\n');
+  
 
-  // 1. Получаем все gifts, у которых есть fundedAmount > 0
+ 
   const gifts = await prisma.gift.findMany({
     where: { fundedAmount: { gt: 0 } },
     include: { couple: true }
@@ -31,7 +25,7 @@ async function check() {
     console.log(`   targetAmount: ${gift.targetAmount} ${gift.currency}`);
     console.log(`   progress: ${((gift.fundedAmount / gift.targetAmount) * 100).toFixed(1)}%`);
 
-    // 2. Проверяем гостей в family_tree
+
     const familyEntries = await prisma.familyTree.findMany({
       where: { coupleId: gift.coupleId },
       include: {
@@ -59,7 +53,7 @@ async function check() {
       }
     }
 
-    // 3. Проверяем взносы (кто делал)
+    
     const contributions = await prisma.contribution.findMany({
       where: { giftId: gift.id },
       include: { guest: { select: { id: true, fullName: true, email: true } } },
@@ -86,9 +80,7 @@ async function check() {
   }
 
   await prisma.$disconnect();
-  console.log('\n═══════════════════════════════════════════');
-  console.log('  ПРОВЕРКА ЗАВЕРШЕНА');
-  console.log('═══════════════════════════════════════════\n');
+  
 }
 
 check().catch(console.error);

@@ -1,38 +1,20 @@
-/**
- * Privacy Tier Middleware
- *
- * Проверяет, что аутентифицированный пользователь имеет доступ к подарку
- * на основании его тира родства (kinship tier) и allowedTiers подарка.
- *
- * Иерархия тиров (каждый вышестоящий видит всё, что ниже):
- *   ata_ana       → видит all (ata_ana, zhien_zaran, kuda_zhekzhen)
- *   zhien_zaran   → видит zhien_zaran, kuda_zhekzhen
- *   kuda_zhekzhen → видит только kuda_zhekzhen
- *
- * Использование:
- *   router.get('/:giftId', authenticate, requirePrivacyTier, controller);
- *
- *   // Для дополнительной проверки в маршрутах со списками:
- *   router.get('/couple/:coupleId', authenticate, requirePrivacyTier({ paramSource: 'query', tierField: 'kinshipTier' }), controller);
- */
+
 
 const { prisma } = require('../config/database');
 
-// ─── Иерархия видимости тиров ────────────────────────────────────────────
-// Ключ — тир пользователя, значение — какие allowedTiers он может видеть
+
 const TIER_VISIBILITY = {
   ata_ana: ['ata_ana', 'zhien_zaran', 'kuda_zhekzhen'],
   zhien_zaran: ['zhien_zaran', 'kuda_zhekzhen'],
   kuda_zhekzhen: ['kuda_zhekzhen'],
 };
 
-// ─── Вспомогательные функции ─────────────────────────────────────────────
+
 
 /**
- * Определить, виден ли подарок гостю с указанным тиром родства.
- *
- * @param {object} gift - объект подарка (должен содержать allowedTiers)
- * @param {string|null} kinshipTier - тир пользователя (ata_ana|zhien_zaran|kuda_zhekzhen)
+ 
+ * @param {object} gift 
+ * @param {string|null} kinshipTier 
  * @returns {boolean}
  */
 function isGiftVisibleForTier(gift, kinshipTier) {
@@ -46,12 +28,11 @@ function isGiftVisibleForTier(gift, kinshipTier) {
 }
 
 /**
- * Получить тир родства пользователя для данной пары.
- *
+ 
  * @param {number} guestId
  * @param {number} coupleId
- * @param {object} [tx] - опционально для транзакции
- * @returns {Promise<string|null>} kinshipTier или null, если не найден
+ * @param {object} [tx] 
+ * @returns {Promise<string|null>} 
  */
 async function getKinshipTier(guestId, coupleId, tx = prisma) {
   const familyEntry = await tx.familyTree.findFirst({
@@ -66,8 +47,7 @@ async function getKinshipTier(guestId, coupleId, tx = prisma) {
 }
 
 /**
- * Проверить, является ли пользователь владельцем подарка (парой).
- *
+ 
  * @param {object} user - req.user
  * @param {number} coupleId
  * @returns {boolean}
@@ -77,29 +57,27 @@ function isGiftOwner(user, coupleId) {
 }
 
 /**
- * Проверить, имеет ли пользователь доступ к подарку.
- * Возвращает объект с результатом и деталями.
- *
- * @param {object} user - req.user (должен содержать id, role)
- * @param {object} gift - объект подарка
+ 
+ * @param {object} user 
+ * @param {object} gift 
  * @param {object} [options]
- * @param {object} [options.tx] - опционально для транзакции
+ * @param {object} [options.tx] 
  * @returns {Promise<{ allowed: boolean, kinshipTier: string|null, reason?: string }>}
  */
 async function checkGiftAccess(user, gift, options = {}) {
   const tx = options.tx || prisma;
 
-  // 1. Владелец (пара) всегда имеет доступ
+  
   if (isGiftOwner(user, gift.coupleId)) {
     return { allowed: true, kinshipTier: null };
   }
 
-  // 2. Администратор всегда имеет доступ
+  
   if (user.role === 'admin') {
     return { allowed: true, kinshipTier: null };
   }
 
-  // 3. Для обычных гостей проверяем тир родства
+  
   if (user.role === 'guest') {
     const kinshipTier = await getKinshipTier(user.id, gift.coupleId, tx);
 
@@ -124,7 +102,7 @@ async function checkGiftAccess(user, gift, options = {}) {
     return { allowed: true, kinshipTier };
   }
 
-  // Неизвестная роль
+  
   return {
     allowed: false,
     kinshipTier: null,
@@ -132,19 +110,10 @@ async function checkGiftAccess(user, gift, options = {}) {
   };
 }
 
-// ─── Middleware Factory ───────────────────────────────────────────────────
+
 
 /**
- * Middleware для проверки доступа к подарку по тиру родства.
- *
- * Варианты использования:
- *
- * 1. Базовая проверка по giftId из параметров маршрута:
- *    router.get('/:giftId', authenticate, requirePrivacyTier, handler);
- *
- * 2. Кастомный источник ID подарка:
- *    router.post('/:someParam/contribute', authenticate, requirePrivacyTier({ giftIdSource: 'body.giftId' }), handler);
- *
+ 
  * @param {object} [options]
  * @param {string} [options.giftIdSource='params.giftId'] - откуда брать giftId
  *        ('params.giftId' | 'body.giftId' | 'query.giftId')
@@ -159,7 +128,7 @@ function requirePrivacyTier(options = {}) {
 
   return async (req, res, next) => {
     try {
-      // Извлекаем giftId из указанного источника
+      
       const sourceParts = giftIdSource.split('.');
       let giftId;
 
@@ -187,7 +156,6 @@ function requirePrivacyTier(options = {}) {
         });
       }
 
-      // Загружаем подарок
       const gift = await prisma.gift.findUnique({
         where: { id: parsedGiftId },
         select: {
@@ -206,7 +174,6 @@ function requirePrivacyTier(options = {}) {
         });
       }
 
-      // Проверяем доступ
       const access = await checkGiftAccess(req.user, gift);
 
       if (!access.allowed) {
@@ -217,11 +184,11 @@ function requirePrivacyTier(options = {}) {
         });
       }
 
-      // Прикрепляем информацию к запросу для последующего использования
+    
       if (attachKinshipTier) {
         req.kinshipTier = access.kinshipTier;
       }
-      req.gift = gift; // для дальнейшего использования в контроллерах
+      req.gift = gift; 
 
       next();
     } catch (error) {

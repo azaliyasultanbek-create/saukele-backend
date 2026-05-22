@@ -13,7 +13,7 @@ console.log('Hash от токена:', hashFromEmail);
 const { prisma } = require('./src/config/database');
 
 async function main() {
-  // Найдём токен по хэшу
+ 
   const tokenInDB = await prisma.userToken.findUnique({
     where: { tokenHash: hashFromEmail }
   });
@@ -29,7 +29,7 @@ async function main() {
     console.log('\n❌ Токен НЕ НАЙДЕН в БД!');
     console.log('Хэш:', hashFromEmail);
     
-    // Покажем все password_reset токены
+   
     const allTokens = await prisma.userToken.findMany({
       where: { userId: 8, type: 'password_reset' },
       orderBy: { createdAt: 'desc' },

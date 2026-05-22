@@ -1,81 +1,19 @@
-/**
- * Gift Access Middleware (Dependency Injection-стиль)
- *
- ========================================================
- * КАСТОМНЫЙ СЛОЙ ПРОВЕРКИ ПРАВ (DI-стиль)
- *
- * В отличие от requirePrivacyTier (который сам загружает gift
- * по giftId из params/body/query), этот middleware:
- *
- *   1) ПРИНИМАЕТ УЖЕ ЗАГРУЖЕННЫЙ gift объект из req.gift
- *      (инъекция зависимости — DI)
- *   2) Работает с НЕАВТОРИЗОВАННЫМИ пользователями:
- *      — Если пользователь не аутентифицирован (req.user нет) —
- *        возвращает 403 Forbidden
- *      — Если пользователь — гость, не добавленный в родословную
- *        пары, или его тир родства не позволяет видеть подарок —
- *        возвращает 403 Forbidden
- *
- * Использование:
- *
- *   // В роуте:
- *   router.get(
- *     '/:giftId/details',
- *     loadGift,               // ← загружает gift в req.gift
- *     requireGiftAccess,      // ← проверяет доступ через req.gift
- *     handler
- *   );
- *
- *   // Или более коротко (всё в одном):
- *   router.get(
- *     '/:giftId',
- *     authenticate,                    // опционально — если нужно,
- *     loadGift,                        // но можно не требовать JWT
- *     requireGiftAccess,
- *     handler
- *   );
- *
- * Поток данных:
- *   req (request) → loadGift → req.gift = { ... }
- *   req (request) → requireGiftAccess → 200/403
- *   req (request) → handler(req, res)
- *
- * Преимущества DI-стиля:
- *   - Тестируемость: можно протестировать middleware изолированно,
- *     подставив мокнутый req.gift
- *   - Повторное использование: один раз загрузили gift — используем
- *     в нескольких middlewares и контроллере
- *   - Разделение ответственности: loadGift только загружает данные,
- *     requireGiftAccess только проверяет права
- *   - Гибкость: можно загрузить gift с любыми включениями (includes)
- *     перед проверкой прав
- */
+
 
 const { prisma } = require('../config/database');
 
-// ─── Иерархия видимости тиров ────────────────────────────────────────────
 const TIER_VISIBILITY = {
   ata_ana: ['ata_ana', 'zhien_zaran', 'kuda_zhekzhen'],
   zhien_zaran: ['zhien_zaran', 'kuda_zhekzhen'],
   kuda_zhekzhen: ['kuda_zhekzhen'],
 };
 
-// ─── DI: Проверка доступа к подарку ──────────────────────────────────────
-
 /**
- * Middleware: requireGiftAccess
- *
- * ПРОВЕРЯЕТ доступ к ПОДАРКУ, который УЖЕ загружен в req.gift
- * (Dependency Injection-стиль).
- *
- * Если req.gift отсутствует — отвечает 500 (ошибка конфигурации роута).
- * Если пользователь не аутентифицирован — 403 Forbidden.
- * Если пользователь — гость без доступа — 403 Forbidden.
- *
+ 
  * @param {object} [options]
- * @param {boolean} [options.allowPublicGifts=true] - разрешить публичные подарки
- *        (gift.allowedTiers содержит все три тира) для неаутентифицированных
- * @param {Function} [options.onForbidden] - кастомный обработчик для 403
+ * @param {boolean} [options.allowPublicGifts=true] 
+ *       
+ * @param {Function} [options.onForbidden] 
  * @returns {Function} middleware
  */
 function requireGiftAccess(options = {}) {
@@ -86,7 +24,6 @@ function requireGiftAccess(options = {}) {
 
   return async (req, res, next) => {
     try {
-      // ── Проверка: gift должен быть загружен в req.gift ──────────
       if (!req.gift) {
         console.error('[requireGiftAccess] req.gift is undefined. Did you forget to use loadGift middleware before this?');
         return res.status(500).json({
@@ -98,14 +35,12 @@ function requireGiftAccess(options = {}) {
 
       const { gift } = req;
 
-      // ── 1. НЕАВТОРИЗОВАННЫЙ пользователь ────────────────────────
       if (!req.user) {
-        // Если подарок публичный (доступен всем тирам) — пускаем
+      
         if (allowPublicGifts && isGiftPublic(gift)) {
           return next();
         }
 
-        // Иначе — 403 Forbidden
         const errorResponse = {
           code: 'FORBIDDEN',
           message: 'Authentication required. Please log in to view this gift.',
@@ -119,21 +54,21 @@ function requireGiftAccess(options = {}) {
         return res.status(403).json(errorResponse);
       }
 
-      // ── 2. АУТЕНТИФИЦИРОВАННЫЙ пользователь ─────────────────────
+    
       const { user } = req;
 
-      // Администратор всегда имеет доступ
+      
       if (user.role === 'admin') {
         return next();
       }
 
-      // Владелец (пара) всегда имеет доступ
+      
       if (user.role === 'couple' && user.id === gift.coupleId) {
         req.kinshipTier = null;
         return next();
       }
 
-      // Гость — проверяем через родословную
+
       if (user.role === 'guest') {
         const familyEntry = await prisma.familyTree.findFirst({
           where: {
@@ -185,12 +120,12 @@ function requireGiftAccess(options = {}) {
           return res.status(403).json(errorResponse);
         }
 
-        // Доступ разрешён — прикрепляем тир к запросу
+        
         req.kinshipTier = kinshipTier;
         return next();
       }
 
-      // Неизвестная роль — 403
+      
       return res.status(403).json({
         code: 'FORBIDDEN',
         message: 'Недостаточно прав для просмотра подарка.',
@@ -207,17 +142,10 @@ function requireGiftAccess(options = {}) {
   };
 }
 
-// ─── DI: Загрузка подарка ────────────────────────────────────────────────
+
 
 /**
- * Middleware: loadGift
- *
- * Загружает подарок по ID из указанного источника и помещает
- * результат в req.gift (Dependency Injection-стиль).
- *
- * Это ЧИСТЫЙ загрузчик данных — без проверки прав.
- * Используйте requireGiftAccess после него для проверки прав.
- *
+ 
  * @param {object} [options]
  * @param {string} [options.giftIdSource='params.giftId'] - откуда брать giftId
  *        ('params.giftId' | 'body.giftId' | 'query.giftId')
@@ -250,7 +178,7 @@ function loadGift(options = {}) {
 
   return async (req, res, next) => {
     try {
-      // Извлекаем giftId из указанного источника
+      
       const sourceParts = giftIdSource.split('.');
       let giftId;
 
@@ -302,7 +230,7 @@ function loadGift(options = {}) {
         return res.status(404).json(errorResponse);
       }
 
-      // DI: Инъекция загруженного подарка в req
+      
       req.gift = gift;
       next();
     } catch (error) {
@@ -316,17 +244,9 @@ function loadGift(options = {}) {
   };
 }
 
-// ─── DI: Комбинированный middleware "загрузить + проверить" ──────────────
 
 /**
- * Middleware: loadAndCheckGiftAccess
- *
- * Комбинирует loadGift + requireGiftAccess в одном middleware.
- * Удобно для простых случаев, когда не нужно разделять загрузку и проверку.
- *
- * Использование:
- *   router.get('/:giftId', authenticate, loadAndCheckGiftAccess(), handler);
- *
+ 
  * @param {object} [loadOptions] - опции для loadGift
  * @param {object} [accessOptions] - опции для requireGiftAccess
  * @returns {Function[]} [loadGift, requireGiftAccess]
@@ -338,11 +258,10 @@ function loadAndCheckGiftAccess(loadOptions = {}, accessOptions = {}) {
   ];
 }
 
-// ─── Вспомогательные функции ─────────────────────────────────────────────
+
 
 /**
- * Проверить, является ли подарок публичным (доступен всем тирам).
- *
+ 
  * @param {object} gift - объект подарка с allowedTiers
  * @returns {boolean}
  */
@@ -353,9 +272,7 @@ function isGiftPublic(gift) {
 }
 
 /**
- * Получить тир родства пользователя для данной пары.
- * (переиспользуемая функция для других middleware/сервисов)
- *
+ 
  * @param {number} guestId
  * @param {number} coupleId
  * @param {object} [tx] - опционально для транзакции

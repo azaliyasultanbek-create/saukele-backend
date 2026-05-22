@@ -1,7 +1,7 @@
 const { prisma } = require('./src/config/database');
 
 async function main() {
-  // Получаем последний созданный токен
+ 
   const token = await prisma.userToken.findFirst({
     where: { userId: 8, type: 'password_reset' },
     orderBy: { createdAt: 'desc' }

@@ -186,14 +186,8 @@ async function getMyKinship(req, res) {
 }
 
 /**
- * Строит иерархическое генеалогическое древо через рекурсивный CTE (WITH RECURSIVE)
- * 
- * Поскольку Prisma ORM не поддерживает WITH RECURSIVE нативно,
- * используется $queryRawUnsafe — это единственное место в проекте
- * с raw SQL, оправданное отсутствием поддержки рекурсивных CTE в ORM.
- * 
- * Запрос строит дерево от корневых узлов (parent_id IS NULL)
- * до всех потомков, группируя по категории родства.
+ * Строит иерархическое генеалогическое древо на стороне приложения
+ * (без raw SQL, через Prisma findMany + рекурсивное построение дерева в JS).
  */
 async function getFamilyTree(req, res) {
   const coupleId = parseInt(req.params.coupleId, 10);
@@ -225,76 +219,63 @@ async function getFamilyTree(req, res) {
       });
     }
 
-    // Рекурсивный CTE: строим всё дерево родственников этой пары
-    const tree = await prisma.$queryRawUnsafe(`
-      WITH RECURSIVE family_recursive AS (
-        -- Базовый случай: корневые узлы (без родителя)
-        SELECT
-          ft.id,
-          ft.couple_id,
-          ft.guest_id,
-          ft.kinship_tier,
-          ft.category,
-          ft.parent_id,
-          ft.created_at,
-          u.full_name AS guest_name,
-          u.phone AS guest_phone,
-          0 AS depth,
-          CAST(ft.id AS TEXT) AS path
-        FROM family_tree ft
-        JOIN users u ON u.id = ft.guest_id
-        WHERE ft.couple_id = $1 AND ft.parent_id IS NULL
+    // Загружаем все записи родословной этой пары через Prisma (без raw SQL)
+    const familyEntries = await prisma.familyTree.findMany({
+      where: { coupleId },
+      include: {
+        guest: {
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
 
-        UNION ALL
-
-        -- Рекурсивный случай: дети
-        SELECT
-          ft.id,
-          ft.couple_id,
-          ft.guest_id,
-          ft.kinship_tier,
-          ft.category,
-          ft.parent_id,
-          ft.created_at,
-          u.full_name AS guest_name,
-          u.phone AS guest_phone,
-          fr.depth + 1 AS depth,
-          fr.path || ',' || CAST(ft.id AS TEXT) AS path
-        FROM family_tree ft
-        JOIN users u ON u.id = ft.guest_id
-        JOIN family_recursive fr ON ft.parent_id = fr.id
-        WHERE ft.couple_id = $1
-      )
-      SELECT * FROM family_recursive
-      ORDER BY path
-    `, coupleId);
-
-    // Преобразуем плоский результат в иерархическое дерево
+    // Строим дерево на стороне приложения
     const nodeMap = new Map();
     const roots = [];
 
-    for (const row of tree) {
+    // Сначала создаём все узлы
+    for (const entry of familyEntries) {
       const node = {
-        id: row.id,
-        guestId: row.guest_id,
-        guestName: row.guest_name,
-        guestPhone: row.guest_phone,
-        kinshipTier: row.kinship_tier,
-        category: row.category,
-        parentId: row.parent_id,
-        depth: row.depth,
-        children: []
+        id: entry.id,
+        guestId: entry.guestId,
+        guestName: entry.guest.fullName,
+        guestPhone: entry.guest.phone,
+        kinshipTier: entry.kinshipTier,
+        category: entry.category,
+        parentId: entry.parentId,
+        depth: 0, // будет вычислено ниже
+        children: [],
       };
-      nodeMap.set(row.id, node);
+      nodeMap.set(entry.id, node);
     }
 
-    for (const row of tree) {
-      const node = nodeMap.get(row.id);
-      if (row.parent_id && nodeMap.has(row.parent_id)) {
-        nodeMap.get(row.parent_id).children.push(node);
-      } else if (!row.parent_id) {
+    // Вычисляем глубину для каждого узла (BFS от корней)
+    const computeDepth = (node, depth) => {
+      node.depth = depth;
+      for (const child of node.children) {
+        computeDepth(child, depth + 1);
+      }
+    };
+
+    // Строим иерархию и определяем корни
+    for (const entry of familyEntries) {
+      const node = nodeMap.get(entry.id);
+      if (entry.parentId && nodeMap.has(entry.parentId)) {
+        nodeMap.get(entry.parentId).children.push(node);
+      } else {
+        // Нет родителя → корневой узел
         roots.push(node);
       }
+    }
+
+    // Вычисляем глубину для всех узлов
+    for (const root of roots) {
+      computeDepth(root, 0);
     }
 
     // Группировка по категориям
@@ -316,17 +297,18 @@ async function getFamilyTree(req, res) {
       }
     };
 
-    for (const row of tree) {
-      const cat = row.category;
+    for (const entry of familyEntries) {
+      const cat = entry.category;
       if (groupedByCategory[cat]) {
+        const node = nodeMap.get(entry.id);
         groupedByCategory[cat].members.push({
-          id: row.id,
-          guestId: row.guest_id,
-          guestName: row.guest_name,
-          guestPhone: row.guest_phone,
-          kinshipTier: row.kinship_tier,
-          parentId: row.parent_id,
-          depth: row.depth
+          id: entry.id,
+          guestId: entry.guestId,
+          guestName: entry.guest.fullName,
+          guestPhone: entry.guest.phone,
+          kinshipTier: entry.kinshipTier,
+          parentId: entry.parentId,
+          depth: node ? node.depth : 0,
         });
       }
     }
@@ -347,7 +329,7 @@ async function getFamilyTree(req, res) {
       groupedByCategory: Object.values(groupedByCategory),
       registries,
       meta: {
-        totalMembers: tree.length,
+        totalMembers: familyEntries.length,
         categories: {
           ATA_ANA: groupedByCategory.ATA_ANA.members.length,
           ZHIEN_ZhARAN: groupedByCategory.ZHIEN_ZhARAN.members.length,

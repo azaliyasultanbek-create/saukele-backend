@@ -1,33 +1,4 @@
-/**
- * Handling Flags Service
- *
- * Специальные флаги транспортировки (fragile-item handling flags),
- * которые тянутся по всей цепочке доставки:
- *
- *   pending ──► funding ──► funded ──► purchased ──► delivered
- *
- * Флаги задаются при создании подарка (couple) и проходят сквозь
- * все состояния жизненного цикла, чтобы на этапе доставки все
- * участники цепочки знали об особых условиях обращения с предметом.
- *
- * ДИНАМИЧЕСКАЯ ОРКЕСТРАЦИЯ ФЛАГОВ:
- *   — Флаги "протекают" (propagate) через все этапы жизненного цикла
- *   — На каждом этапе флаги дополняются контекстом конкретного этапа
- *   — При переходе между этапами проверяется полнота логистических требований
- *   — Формируется цепочка флагов (flag chain) с отметками времени
- *
- * Доступные флаги:
- *   FRAGILE       — хрупкий предмет (стекло, керамика, электроника)
- *   PERISHABLE    — скоропортящийся (требует холодильника/особого режима)
- *   OVERSIZE      — крупногабаритный (требует спецтранспорта)
- *   LIQUID        — жидкость (герметичная упаковка, ориентация)
- *   HEAVY         — тяжёлый (вес > 20 кг, нужны грузчики)
- *   VALUABLE      — ценный (страховка, подпись при получении)
- *   TEMP_CONTROLLED — требует температурного контроля
- *   ELECTRONICS   — электроника (антистатик, защита от ударов)
- */
 
-// ─── Определения флагов ─────────────────────────────────────────────────
 
 const HANDLING_FLAGS = {
   FRAGILE: {
@@ -138,8 +109,6 @@ const HANDLING_FLAGS = {
 
 const ALL_VALID_FLAGS = Object.values(HANDLING_FLAGS).map(f => f.code);
 
-// ─── Категоризация флагов по логистическим требованиям ───────────────────
-
 const FLAG_CATEGORIES = {
   PACKAGING: Object.values(HANDLING_FLAGS)
     .filter(f => f.requiresPackaging)
@@ -162,7 +131,6 @@ const FLAG_CATEGORIES = {
     .map(f => f.code),
 };
 
-// ─── Совместимость флагов ────────────────────────────────────────────────
 
 const FLAG_COMPATIBILITY = {
   COMPATIBLE_GROUPS: {
@@ -178,8 +146,6 @@ const FLAG_COMPATIBILITY = {
     { flags: ['PERISHABLE', 'ELECTRONICS'], severity: 'warning', message: 'Скоропортящиеся продукты и электроника обычно транспортируются раздельно' },
   ],
 };
-
-// ─── Валидация ──────────────────────────────────────────────────────────
 
 function validateHandlingFlags(flags) {
   if (!Array.isArray(flags)) {
@@ -259,23 +225,21 @@ function getPackagingRequirements(flags) {
   };
 }
 
-// ─── Оркестрационные функции (Logistics Orchestration) ───────────────────
+
 
 /**
- * Сформировать полный логистический манифест для подарка на основе флагов.
- * Используется на этапах purchased → delivered для передачи в службу доставки.
- *
- * @param {string[]} flags - массив кодов флагов
- * @param {object} [giftInfo] - дополнительная информация о подарке
- * @param {string} [giftInfo.name] - название подарка
- * @param {number} [giftInfo.targetAmount] - сумма
- * @param {string} [giftInfo.currency] - валюта
- * @returns {object} логистический манифест
+ 
+ * @param {string[]} flags 
+ * @param {object} [giftInfo] 
+ * @param {string} [giftInfo.name] 
+ * @param {number} [giftInfo.targetAmount] 
+ * @param {string} [giftInfo.currency] 
+ * @returns {object} 
  */
 function buildLogisticsManifest(flags, giftInfo = {}) {
   const annotated = annotateFlags(flags);
 
-  // Определяем необходимые ресурсы на основе флагов
+
   const requiresSpecialTransport = flags.some(f => FLAG_CATEGORIES.SPECIAL_TRANSPORT.includes(f));
   const requiresExtraStaff = flags.some(f => FLAG_CATEGORIES.EXTRA_STAFF.includes(f));
   const requiresInsurance = flags.some(f => FLAG_CATEGORIES.INSURANCE_REQUIRED.includes(f));
@@ -315,28 +279,26 @@ function buildLogisticsManifest(flags, giftInfo = {}) {
       signatureRequired: requiresSignature,
       packaging,
     },
-    // Флаги, сгруппированные по категориям для систем доставки
+    
     orchestrationHints: {
-      // Флаги, которые требуют внимания при упаковке
+      
       packagingFlags: flags.filter(f => HANDLING_FLAGS[f]?.requiresPackaging),
-      // Флаги, влияющие на выбор транспорта
+     
       transportFlags: flags.filter(f => HANDLING_FLAGS[f]?.requiresSpecialTransport),
-      // Флаги, влияющие на персонал
+      
       staffingFlags: flags.filter(f => HANDLING_FLAGS[f]?.requiresExtraStaff),
-      // Флаги, требующие подписи/страховки
+     
       complianceFlags: flags.filter(f => HANDLING_FLAGS[f]?.requiresSignature || HANDLING_FLAGS[f]?.requiresInsurance),
     },
   };
 }
 
 /**
- * Получить флаги, релевантные для конкретного этапа жизненного цикла подарка.
- * Разные этапы требуют внимания к разным аспектам флагов.
- *
- * @param {string[]} flags - массив кодов флагов
- * @param {string} lifecycleStage - этап жизненного цикла
+ 
+ * @param {string[]} flags 
+ * @param {string} lifecycleStage а
  *        ('pending' | 'funding' | 'funded' | 'purchased' | 'delivered')
- * @returns {object} - релевантные флаги и инструкции для данного этапа
+ * @returns {object} 
  */
 function getFlagsForLifecycleStage(flags, lifecycleStage) {
   if (!Array.isArray(flags) || flags.length === 0) {
@@ -386,9 +348,8 @@ function getFlagsForLifecycleStage(flags, lifecycleStage) {
 }
 
 /**
- * Определить уровень сложности доставки на основе флагов.
- * 
- * @param {string[]} flags - массив кодов флагов
+ 
+ * @param {string[]} flags 
  * @returns {{ level: string, score: number, description: string }}
  */
 function calculateDeliveryComplexity(flags) {
@@ -427,9 +388,8 @@ function calculateDeliveryComplexity(flags) {
 }
 
 /**
- * Получить сводку по совместимым группам флагов из предустановленных шаблонов.
- * 
- * @param {string[]} flags - массив кодов флагов
+
+ * @param {string[]} flags 
  * @returns {Array<{ groupName: string, matched: boolean, flags: string[], label: string }>}
  */
 function getMatchingFlagGroups(flags) {
@@ -449,22 +409,7 @@ function getMatchingFlagGroups(flags) {
   return groups;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ДИНАМИЧЕСКАЯ ОРКЕСТРАЦИЯ ФЛАГОВ (Lifecycle Flag Propagation)
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// Флаги "протекают" через жизненный цикл подарка. На каждом этапе
-// мы формируем контекст, который обогащается по мере продвижения.
-//
-// Поток флагов:
-//   pending  ──►  funding  ──►  funded  ──►  purchased  ──►  delivered
-//   (установка)   (инфо)       (планирование)  (манифест)     (отчёт)
-// ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Типы lifecycle-этапов с описанием, какие логистические действия
- * должны быть выполнены на каждом этапе.
- */
 const LIFECYCLE_STAGES = {
   pending: {
     order: 0,
@@ -504,8 +449,7 @@ const LIFECYCLE_STAGES = {
 };
 
 /**
- * Проверить, что логистические требования для данного этапа выполнены.
- * 
+  
  * @param {string[]} flags - текущие флаги подарка
  * @param {string} fromStage - текущий этап
  * @param {string} toStage - целевой этап
@@ -516,15 +460,15 @@ function validateLogisticsTransition(flags, fromStage, toStage) {
   const blocks = [];
 
   if (!Array.isArray(flags) || flags.length === 0) {
-    // Если флагов нет — никаких логистических требований
+   
     return { canProceed: true, warnings: [], blocks: [] };
   }
 
   const annotated = annotateFlags(flags);
 
-  // ── Проверки при переходе funded → purchased ──────────────────────
+  
   if (toStage === 'purchased') {
-    // Проверяем, что все конфликты флагов известны
+   
     const compatibility = checkFlagCompatibility(flags);
     if (compatibility.hasConflicts) {
       compatibility.conflicts.forEach(c => {
@@ -536,29 +480,29 @@ function validateLogisticsTransition(flags, fromStage, toStage) {
       });
     }
 
-    // Если есть VALUABLE — проверить, что страховка настроена
+   
     if (flags.includes('VALUABLE')) {
       warnings.push('Требуется оформить страховку для ценного груза.');
     }
   }
 
-  // ── Проверки при переходе purchased → delivered ───────────────────
+  
   if (toStage === 'delivered') {
-    // Флаги, требующие спецтранспорта
+   
     if (flags.some(f => HANDLING_FLAGS[f]?.requiresSpecialTransport)) {
       const transportFlags = flags.filter(f => HANDLING_FLAGS[f]?.requiresSpecialTransport);
       const transportLabels = transportFlags.map(f => HANDLING_FLAGS[f]?.label).filter(Boolean);
       warnings.push(`Требуется спецтранспорт: ${transportLabels.join(', ')}.`);
     }
 
-    // Флаги, требующие доп. персонала
+    
     if (flags.some(f => HANDLING_FLAGS[f]?.requiresExtraStaff)) {
       const staffFlags = flags.filter(f => HANDLING_FLAGS[f]?.requiresExtraStaff);
       const staffLabels = staffFlags.map(f => HANDLING_FLAGS[f]?.label).filter(Boolean);
       warnings.push(`Требуется доп. персонал (грузчики): ${staffLabels.join(', ')}.`);
     }
 
-    // Флаги, требующие подписи
+    
     if (flags.some(f => HANDLING_FLAGS[f]?.requiresSignature)) {
       warnings.push('Требуется подпись получателя при вручении.');
     }
@@ -571,22 +515,11 @@ function validateLogisticsTransition(flags, fromStage, toStage) {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ЦЕПОЧКИ ФЛАГОВ (Flag Chain / Propagation History)
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// Цепочка флагов — это массив записей вида:
-//   { flag: 'FRAGILE', stage: 'pending', propagatedAt: <ISO timestamp> }
-//
-// Каждый раз, когда подарок переходит на новый этап, флаги "протекают"
-// (propagate) и фиксируются в цепочке. Это позволяет отслеживать,
-// на каком этапе какие флаги были активны.
-// ═══════════════════════════════════════════════════════════════════════════
+
 
 /**
- * Создать новую цепочку флагов для подарка (при создании).
- * 
- * @param {string[]} flags - массив кодов флагов
+ 
+ * @param {string[]} flags 
  * @returns {Array<{ flag: string, stage: string, propagatedAt: string }>}
  */
 function createFlagChain(flags) {
@@ -609,13 +542,11 @@ function createFlagChain(flags) {
 }
 
 /**
- * "Протолкнуть" (propagate) флаги на следующий этап жизненного цикла.
- * Добавляет записи в цепочку для каждого флага.
- * 
- * @param {Array<{ flag: string, stage: string, propagatedAt: string }>} existingChain - текущая цепочка
- * @param {string[]} currentFlags - текущие флаги подарка
- * @param {string} newStage - новый этап ('funding' | 'funded' | 'purchased' | 'delivered')
- * @returns {Array} — обновлённая цепочка
+ 
+ * @param {Array<{ flag: string, stage: string, propagatedAt: string }>} existingChain 
+ * @param {string[]} currentFlags 
+ * @param {string} newStage 
+ * @returns {Array} 
  */
 function propagateFlagsToStage(existingChain, currentFlags, newStage) {
   if (!Array.isArray(currentFlags) || currentFlags.length === 0) {
@@ -639,10 +570,9 @@ function propagateFlagsToStage(existingChain, currentFlags, newStage) {
 }
 
 /**
- * Получить историю прохождения флагов по этапам.
- * 
- * @param {Array} flagChain - цепочка флагов
- * @returns {object} — группировка по этапам
+ 
+ * @param {Array} flagChain 
+ * @returns {object} 
  */
 function getFlagPropagationHistory(flagChain) {
   if (!Array.isArray(flagChain) || flagChain.length === 0) {
@@ -663,9 +593,8 @@ function getFlagPropagationHistory(flagChain) {
 }
 
 /**
- * Получить сводку по цепочке флагов.
- * 
- * @param {Array} flagChain - цепочка флагов
+ 
+ * @param {Array} flagChain 
  * @returns {object}
  */
 function summarizeFlagChain(flagChain) {
@@ -692,90 +621,80 @@ function summarizeFlagChain(flagChain) {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ДИНАМИЧЕСКАЯ ОРКЕСТРАЦИЯ: ПОЛНЫЙ ЦИКЛ
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// orchestrageLifecycleFlags() — главная функция, которая:
-//   1. Принимает текущее состояние подарка (флаги, статус, цепочку)
-//   2. Проверяет, какие логистические действия нужны
-//   3. Обновляет цепочку флагов (propagate)
-//   4. Возвращает полный отчёт для текущего этапа
-// ═══════════════════════════════════════════════════════════════════════════
+
 
 /**
- * Оркестрировать флаги транспортировки при переходе на новый этап.
- * 
+  
  * @param {object} params
- * @param {string[]} params.flags - текущие флаги подарка
- * @param {string} params.fromStage - предыдущий этап
- * @param {string} params.toStage - новый этап
- * @param {Array} [params.flagChain] - существующая цепочка флагов (опционально)
- * @param {object} [params.giftInfo] - информация о подарке
- * @returns {object} — полный отчёт оркестрации
+ * @param {string[]} params.flags 
+ * @param {string} params.fromStage 
+ * @param {string} params.toStage 
+ * @param {Array} [params.flagChain] 
+ * @param {object} [params.giftInfo] 
+ * @returns {object} 
  */
 function orchestrateLifecycleFlags({ flags, fromStage, toStage, flagChain, giftInfo = {} }) {
   const effectiveFlags = Array.isArray(flags) ? flags : [];
 
-  // 1. Валидируем переход с точки зрения логистики
+  
   const transitionValidation = validateLogisticsTransition(effectiveFlags, fromStage, toStage);
 
-  // 2. "Проталкиваем" флаги на новый этап
+ 
   const updatedChain = propagateFlagsToStage(flagChain, effectiveFlags, toStage);
 
-  // 3. Строим контекст для нового этапа
+  
   const lifecycleContext = getFlagsForLifecycleStage(effectiveFlags, toStage);
 
-  // 4. Строим полный манифест
+  
   const manifest = buildLogisticsManifest(effectiveFlags, giftInfo);
 
-  // 5. Сложность доставки
+  
   const complexity = calculateDeliveryComplexity(effectiveFlags);
 
-  // 6. Совместимость флагов
+  
   const compatibility = checkFlagCompatibility(effectiveFlags);
 
-  // 7. Цепочка флагов
+ 
   const chainSummary = summarizeFlagChain(updatedChain);
 
   return {
-    // Текущее состояние
+    
     stage: toStage,
     stageInfo: LIFECYCLE_STAGES[toStage] || null,
     lifecycleContext,
 
-    // Флаги
+    
     flags: effectiveFlags,
     flagsAnnotated: annotateFlags(effectiveFlags),
 
-    // Валидация перехода
+    
     transitionValidation,
 
-    // Манифест
+    
     manifest,
 
-    // Сложность
+    
     deliveryComplexity: complexity,
 
-    // Совместимость
+  
     flagCompatibility: compatibility,
 
-    // Цепочка флагов (история прохождения)
+    
     flagChain: updatedChain,
     flagChainSummary: chainSummary,
 
-    // Заметка для доставки
+   
     deliveryNote: buildDeliveryNote(effectiveFlags),
 
-    // Требования к упаковке
+    
     packagingRequirements: getPackagingRequirements(effectiveFlags),
 
-    // Отметка времени
+
     timestamp: new Date().toISOString(),
   };
 }
 
-// ─── Экспорт ─────────────────────────────────────────────────────────────
+
 
 module.exports = {
   // Константы
@@ -785,25 +704,25 @@ module.exports = {
   FLAG_COMPATIBILITY,
   LIFECYCLE_STAGES,
 
-  // Валидация
+
   validateHandlingFlags,
   checkFlagCompatibility,
 
-  // Интроспекция
+  
   getFlagInfo,
   annotateFlags,
   buildDeliveryNote,
   getPackagingRequirements,
 
-  // Логистический манифест
+
   buildLogisticsManifest,
 
-  // Жизненный цикл
+  
   getFlagsForLifecycleStage,
   calculateDeliveryComplexity,
   getMatchingFlagGroups,
 
-  // ═══ НОВОЕ: Динамическая оркестрация ═══
+ 
   validateLogisticsTransition,
   createFlagChain,
   propagateFlagsToStage,

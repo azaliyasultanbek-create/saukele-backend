@@ -9,12 +9,12 @@ async function simulate() {
   const coupleId = 10; // dari
   
   try {
-    // 1. Находим гостя
+  
     const guest = await prisma.user.findUnique({ where: { phone: guestPhone } });
     console.log('1. Гость найден:', guest ? guest.fullName : 'НЕТ');
     if (!guest) { console.log('СТОП: гость не найден'); return; }
     
-    // 2. Находим профиль пары
+    
     const coupleProfile = await prisma.coupleProfile.findUnique({
       where: { coupleId },
       include: { user: { select: { fullName: true } } }
@@ -23,17 +23,17 @@ async function simulate() {
     
     if (!coupleProfile) { console.log('СТОП: профиль пары не найден'); return; }
     
-    // 3. Собираем имя
+    
     const coupleDisplayName = coupleProfile 
       ? coupleProfile.user.fullName + ' & ' + (coupleProfile.partner2Name || '')
       : 'Test Couple';
     console.log('3. displayName:', coupleDisplayName);
     
-    // 4. Проверяем email гостя
+   
     console.log('4. Email гостя:', guest.email || 'ОТСУТСТВУЕТ');
     if (!guest.email) { console.log('СТОП: у гостя нет email'); return; }
     
-    // 5. Отправляем
+    
     console.log('5. Отправляю...');
     const result = await queueRegistryInvitationEmail({
       recipientEmail: guest.email,

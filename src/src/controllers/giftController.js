@@ -40,8 +40,7 @@ function formatGift(gift) {
 
 function giftVisibleForTier(gift, tier) {
   if (!Array.isArray(gift.allowedTiers)) return false;
-  // Иерархическая проверка: если подарок доступен для любого из тиров,
-  // которые входят в видимость данного гостя, то показываем
+
   const allowedCategories = TIER_VISIBILITY[tier] || [tier];
   return gift.allowedTiers.some(t => allowedCategories.includes(t));
 }
@@ -91,8 +90,6 @@ async function createGift(req, res) {
       timestamp: new Date().toISOString()
     });
   }
-
-  // ── Валидация флагов транспортировки ────────────────────────────────
   const giftHandlingFlags = handlingFlags || [];
   if (giftHandlingFlags.length > 0) {
     const flagValidation = validateHandlingFlags(giftHandlingFlags);
@@ -376,7 +373,6 @@ async function deleteGift(req, res) {
       });
     }
 
-    // Actual delete (not soft-delete) for gifts with no contributions
     await prisma.gift.delete({
       where: { id: parseInt(giftId, 10) }
     });
@@ -445,7 +441,7 @@ async function updateGift(req, res) {
       });
     }
 
-    // ── Валидация флагов транспортировки при обновлении ───────────────
+   
     if (handlingFlags !== undefined) {
       if (!Array.isArray(handlingFlags)) {
         return res.status(400).json({

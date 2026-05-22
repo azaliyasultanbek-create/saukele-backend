@@ -8,7 +8,6 @@ const rawToken = 'dbead9b24e441402b2a6694c1c47843be42fafc8e98429735e01033f642838
 console.log('Token from frontend:', rawToken);
 console.log('Its hash:', hashToken(rawToken));
 
-// Теперь давайте посмотрим ALL токены и их хэши
 const { prisma } = require('./src/config/database');
 
 async function main() {

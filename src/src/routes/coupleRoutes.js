@@ -9,11 +9,11 @@ const {
 
 const router = express.Router();
 
-// Public routes
+
 router.get('/weddings', getAllWeddings);
 router.get('/:coupleId', getWeddingProfile);
 
-// Protected routes
+
 router.post('/profile', authenticate, requireEmailVerified, requireRole('couple', 'admin'), createWeddingProfile);
 router.put('/:coupleId', authenticate, requireEmailVerified, requireRole('couple', 'admin'), updateWeddingProfile);
 

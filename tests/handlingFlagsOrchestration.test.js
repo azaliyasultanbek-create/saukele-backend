@@ -1,14 +1,4 @@
-/**
- * Тесты для динамической оркестрации флагов транспортировки
- *
- * Проверяем:
- *   1. createFlagChain — создание цепочки флагов
- *   2. propagateFlagsToStage — проталкивание флагов на новый этап
- *   3. summarizeFlagChain — сводка по цепочке
- *   4. validateLogisticsTransition — валидация перехода
- *   5. orchestrateLifecycleFlags — полная оркестрация
- *   6. lifecycle сквозной тест (pending → delivered)
- */
+
 
 const {
   createFlagChain,
@@ -20,7 +10,7 @@ const {
 } = require('../src/services/handlingFlagsService');
 
 describe('Handling Flags — Динамическая оркестрация', () => {
-  // ─── createFlagChain ─────────────────────────────────────────────────
+  
   describe('createFlagChain', () => {
     test('создаёт цепочку с правильными флагами на этапе pending', () => {
       const chain = createFlagChain(['FRAGILE', 'VALUABLE']);
@@ -51,7 +41,7 @@ describe('Handling Flags — Динамическая оркестрация', (
     });
   });
 
-  // ─── propagateFlagsToStage ──────────────────────────────────────────
+ 
   describe('propagateFlagsToStage', () => {
     test('добавляет записи для каждого флага на новом этапе', () => {
       const existingChain = createFlagChain(['FRAGILE']);
@@ -82,7 +72,7 @@ describe('Handling Flags — Динамическая оркестрация', (
     });
   });
 
-  // ─── summarizeFlagChain ─────────────────────────────────────────────
+  
   describe('summarizeFlagChain', () => {
     test('возвращает правильную сводку', () => {
       const chain = [
@@ -108,8 +98,7 @@ describe('Handling Flags — Динамическая оркестрация', (
     });
   });
 
-  // ─── validateLogisticsTransition ────────────────────────────────────
-  describe('validateLogisticsTransition', () => {
+    describe('validateLogisticsTransition', () => {
     test('разрешает переход без флагов', () => {
       const result = validateLogisticsTransition([], 'funded', 'purchased');
       expect(result.canProceed).toBe(true);
@@ -141,7 +130,7 @@ describe('Handling Flags — Динамическая оркестрация', (
     });
   });
 
-  // ─── orchestrateLifecycleFlags ──────────────────────────────────────
+
   describe('orchestrateLifecycleFlags', () => {
     test('возвращает полный отчёт для purchased с FRAGILE+VALUABLE', () => {
       const result = orchestrateLifecycleFlags({
@@ -197,29 +186,29 @@ describe('Handling Flags — Динамическая оркестрация', (
     });
   });
 
-  // ─── Сквозной lifecycle тест ────────────────────────────────────────
+  
   describe('Lifecycle сквозной тест — FRAGILE + VALUABLE', () => {
     const flags = ['FRAGILE', 'VALUABLE'];
 
     test('этап 1: pending — создание флагов через orchestrateLifecycleFlags', () => {
-      // orchestrateLifecycleFlags сам создаёт propagate через toStage
+      
       const result = orchestrateLifecycleFlags({
         flags,
         fromStage: null,
         toStage: 'pending',
-        flagChain: [], // начинаем с пустой цепочки
+        flagChain: [],
       });
 
       expect(result.stage).toBe('pending');
-      expect(result.flagChain).toHaveLength(2); // 2 флага × pending
+      expect(result.flagChain).toHaveLength(2); 
       expect(result.flagChainSummary.stagesCovered).toEqual(['pending']);
       expect(result.lifecycleContext.stageInstructions).toContain('установлены');
     });
 
     test('этап 2: funding — флаги протекают через orchestrateLifecycleFlags', () => {
-      const prevChain = createFlagChain(flags); // pending: 2 записи
+      const prevChain = createFlagChain(flags); 
 
-      // orchestrateLifecycleFlags сам добавит funding
+      
       const result = orchestrateLifecycleFlags({
         flags,
         fromStage: 'pending',
@@ -228,15 +217,15 @@ describe('Handling Flags — Динамическая оркестрация', (
       });
 
       expect(result.stage).toBe('funding');
-      // 2 (pending) + 2 (funding) = 4
+      
       expect(result.flagChainSummary.totalPropagations).toBe(4);
     });
 
     test('этап 3: funded — планирование логистики', () => {
-      // Симулируем, что прошло 2 этапа: pending + funding
+     
       let chain = createFlagChain(flags);
       chain = propagateFlagsToStage(chain, flags, 'funding');
-      // теперь chain: 4 записи (2 pending + 2 funding)
+     
 
       const result = orchestrateLifecycleFlags({
         flags,
@@ -246,17 +235,17 @@ describe('Handling Flags — Динамическая оркестрация', (
       });
 
       expect(result.stage).toBe('funded');
-      // 4 + 2 (funded) = 6
+     
       expect(result.flagChainSummary.totalPropagations).toBe(6);
       expect(result.lifecycleContext.planningRequired).toBeDefined();
     });
 
     test('этап 4: purchased — манифест готов', () => {
-      // Симулируем: pending + funding + funded
+      
       let chain = createFlagChain(flags);
       chain = propagateFlagsToStage(chain, flags, 'funding');
       chain = propagateFlagsToStage(chain, flags, 'funded');
-      // chain: 6 записей
+     
 
       const result = orchestrateLifecycleFlags({
         flags,
@@ -267,23 +256,23 @@ describe('Handling Flags — Динамическая оркестрация', (
       });
 
       expect(result.stage).toBe('purchased');
-      // 6 + 2 (purchased) = 8
+     
       expect(result.flagChainSummary.totalPropagations).toBe(8);
       expect(result.manifest).toBeDefined();
       expect(result.transitionValidation.warnings.some(w => w.includes('страховку'))).toBe(true);
 
-      // Проверяем манифест
+      
       expect(result.manifest.logisticsRequirements.insurance.required).toBe(true);
       expect(result.manifest.logisticsRequirements.signatureRequired).toBe(true);
     });
 
     test('этап 5: delivered — финальный отчёт (полный lifecycle)', () => {
-      // Симулируем полный lifecycle: pending + funding + funded + purchased
+      
       let chain = createFlagChain(flags);
       chain = propagateFlagsToStage(chain, flags, 'funding');
       chain = propagateFlagsToStage(chain, flags, 'funded');
       chain = propagateFlagsToStage(chain, flags, 'purchased');
-      // chain: 8 записей
+      
 
       const result = orchestrateLifecycleFlags({
         flags,
@@ -294,11 +283,10 @@ describe('Handling Flags — Динамическая оркестрация', (
       });
 
       expect(result.stage).toBe('delivered');
-      // 8 + 2 (delivered) = 10 — 2 flags × 5 stages
+      
       expect(result.flagChainSummary.totalPropagations).toBe(10);
 
-      // ── Чистый тест orchestrateLifecycleFlags с нуля ──────────────
-      // Создаём полную цепочку с нуля через orchestrateLifecycleFlags
+    
       let currentChain = [];
       for (const stage of ['pending', 'funding', 'funded', 'purchased', 'delivered']) {
         const res = orchestrateLifecycleFlags({
@@ -318,13 +306,13 @@ describe('Handling Flags — Динамическая оркестрация', (
       expect(result.lifecycleContext.completionReport).toBeDefined();
       expect(result.lifecycleContext.completionReport.flagsHandled).toEqual(['FRAGILE', 'VALUABLE']);
 
-      // Финальная сложность — FRAGILE(2) + VALUABLE(3) = 5 → special
+    
       expect(result.deliveryComplexity.level).toBe('special');
-      expect(result.deliveryComplexity.score).toBe(5); // 2 (FRAGILE) + 3 (VALUABLE)
+      expect(result.deliveryComplexity.score).toBe(5); 
     });
   });
 
-  // ─── Тест сложности ─────────────────────────────────────────────────
+ 
   describe('calculateDeliveryComplexity', () => {
     test('standard для подарка без флагов', () => {
       expect(calculateDeliveryComplexity([]).level).toBe('standard');

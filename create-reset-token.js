@@ -18,7 +18,7 @@ async function main() {
     process.exit(1);
   }
   
-  // Создаём новый токен
+ 
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);
   

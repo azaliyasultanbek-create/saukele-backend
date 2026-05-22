@@ -55,8 +55,7 @@ if (useMockRedis) {
       await redisClient.connect();
     } catch (err) {
       console.warn(`⚠ Redis not available (${err.message}), using MockRedis instead`);
-      // Replace the redisClient reference with MockRedis so BullMQ queue/worker
-      // that hold a reference to the redisClient module variable will use mock
+      
       const mockClient = new MockRedisClient();
       module.exports.redisClient = mockClient;
       redisClient = mockClient;

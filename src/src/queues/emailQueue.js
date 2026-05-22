@@ -1,6 +1,4 @@
 const { Queue } = require('bullmq');
-
-// Get redis client lazily — will be replaced with MockRedis if connection fails
 const getRedisClient = () => {
   const { redisClient } = require('../config/redis');
   return redisClient;
@@ -15,7 +13,6 @@ const {
   isSmtpReady
 } = require('../services/emailService');
 
-// ─── Вспомогательные функции для новых типов (синхронная отправка в Mock) ─
 
 const TIER_LABELS = {
   ata_ana: 'Ата-ана (родители)',
@@ -44,11 +41,11 @@ async function sendGiftDeliveryConfirmationEmail(email, data) {
   await sendMail({ to: email, subject, html: `<p>${timingInfo}</p><p>Доставлено: ${new Date(data.deliveredAt || Date.now()).toLocaleString('ru-KZ')}</p>` });
 }
 
-// ─── Основная функция отправки ─────────────────────────────────────────
+
 
 async function sendEmailJobNow(data) {
   switch (data.type) {
-    // Существующие типы
+  
     case 'verification':
       await sendVerificationEmail(data.to, data.data.code);
       break;
@@ -62,7 +59,7 @@ async function sendEmailJobNow(data) {
       await sendGiftFundedEmail(data.to, data.data);
       break;
 
-    // НОВЫЕ типы
+   
     case 'registry-invitation':
       await sendRegistryInvitationEmail(data.to, data.data);
       break;
@@ -83,7 +80,7 @@ async function sendEmailJobNow(data) {
   }
 }
 
-// ─── Mock Queue ────────────────────────────────────────────────────────
+
 
 class MockEmailQueue {
   constructor() {

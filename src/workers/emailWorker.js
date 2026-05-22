@@ -9,7 +9,6 @@ const {
   sendMail
 } = require('../services/emailService');
 
-// ─── Вспомогательные функции (для новых типов писем) ─────────────────
 
 async function sendFundingProgressUpdateEmail(data) {
   const subject = `📊 Прогресс сбора на «${data.giftName}»: ${(data.progressPercent || 0).toFixed(1)}%`;
@@ -90,7 +89,7 @@ async function sendGiftDeliveryConfirmationEmail(email, data) {
   return sendMail({ to: email, subject, html });
 }
 
-// ─── Worker ──────────────────────────────────────────────────────────
+
 
 const worker = new Worker('emails', async (job) => {
   const { type, to, data } = job.data;
@@ -98,7 +97,7 @@ const worker = new Worker('emails', async (job) => {
   console.log(`[Worker] Processing job ${job.id}: ${type}`);
 
   switch (type) {
-    // ─── Существующие типы ────────────────────────────────────────
+  
     case 'verification':
       await sendVerificationEmail(to, data.code);
       break;
@@ -115,7 +114,7 @@ const worker = new Worker('emails', async (job) => {
       await sendGiftFundedEmail(to, data);
       break;
 
-    // ─── НОВЫЕ: 3 бизнес-события ─────────────────────────────────
+  
 
     case 'registry-invitation':
       await sendRegistryInvitationEmail(to, data);
@@ -126,9 +125,9 @@ const worker = new Worker('emails', async (job) => {
       break;
 
     case 'gift-delivery-confirmation':
-      // Отправляем паре
+   
       await sendGiftDeliveryConfirmationEmail(to, data);
-      // Если есть флаг ccGuests — отправляем копии гостям
+      
       if (data.ccGuests && Array.isArray(data.guestEmails)) {
         for (const guestEmail of data.guestEmails) {
           await sendGiftDeliveryConfirmationEmail(guestEmail, {

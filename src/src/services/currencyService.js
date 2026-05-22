@@ -83,9 +83,9 @@ async function refreshRates() {
 }
 
 /**
- * Получить курс валюты к KZT
- * @param {string} currencyCode - KZT, EUR, USD
- * @returns {number} — сколько KZT в 1 единице валюты
+ 
+ * @param {string} currencyCode 
+ * @returns {number} 
  */
 function getRate(currencyCode) {
   if (!isCurrencySupported(currencyCode)) {
@@ -96,19 +96,13 @@ function getRate(currencyCode) {
 }
 
 /**
- * Конвертировать сумму из одной валюты в другую
- *
+ 
  * @param {number} amount - сумма для конвертации
  * @param {string} fromCurrency - исходная валюта
  * @param {string} toCurrency - целевая валюта
  * @returns {{ amount: number, rate: number }}
  *
- * Пример:
- *   convert(100, 'USD', 'KZT')
- *   => { amount: 46000, rate: 460 }  (1 USD = 460 KZT)
- *
- *   convert(50000, 'KZT', 'USD')
- *   => { amount: 109, rate: 0.0022 } (1 KZT = 0.0022 USD)
+ 
  */
 function convert(amount, fromCurrency, toCurrency) {
   if (!isCurrencySupported(fromCurrency)) {
@@ -136,10 +130,10 @@ function convert(amount, fromCurrency, toCurrency) {
 }
 
 /**
- * Форматировать сумму с символом валюты
+ 
  * @param {number} amount
  * @param {string} currencyCode
- * @returns {string} — "₸ 50000", "$ 108.70", "€ 94.34"
+ * @returns {string} 
  */
 function formatAmount(amount, currencyCode) {
   const info = SUPPORTED_CURRENCIES[currencyCode];
@@ -161,26 +155,11 @@ if (refreshInterval.unref) {
 }
 
 /**
- * Заморозить (заблокировать) курс обмена в момент транзакции.
- * Возвращает "snapshot" курса между двумя валютами с меткой времени.
- *
- * Этот snapshot должен быть записан в строку транзакции (Contribution)
- * и НЕ должен изменяться после записи (иммутабельность).
- *
- * @param {string} fromCurrency - исходная валюта (в которой платит гость)
- * @param {string} toCurrency   - целевая валюта (валюта подарка)
- * @param {number} [amount]     - опциональная сумма для конвертации
+ 
+ * @param {string} fromCurrency 
+ * @param {string} toCurrency   
+ * @param {number} [amount]     
  * @returns {{ rate: number, rateTimestamp: string, fromCurrency: string, toCurrency: string, convertedAmount: number|null }}
- *
- * Пример:
- *   snapshotRate('USD', 'KZT', 100)
- *   => {
- *        rate: 460,
- *        rateTimestamp: '2025-06-21T17:28:44.123Z',
- *        fromCurrency: 'USD',
- *        toCurrency: 'KZT',
- *        convertedAmount: 46000
- *      }
  */
 function snapshotRate(fromCurrency, toCurrency, amount = null) {
   if (!isCurrencySupported(fromCurrency)) {
@@ -190,7 +169,7 @@ function snapshotRate(fromCurrency, toCurrency, amount = null) {
     throw new Error(`UNSUPPORTED_CURRENCY: ${toCurrency}`);
   }
 
-  // Получаем курс ПРЯМО СЕЙЧАС — блокируем значение
+
   const rate = fromCurrency === toCurrency
     ? 1
     : getRate(fromCurrency) / getRate(toCurrency);

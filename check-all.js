@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function check() {
-  // 1. Все подарки пары 11
+ 
   const gifts = await prisma.gift.findMany({
     where: { coupleId: 11 }
   });
@@ -12,7 +12,7 @@ async function check() {
     console.log('  id=' + g.id + ' | ' + g.name + ' | ' + g.fundedAmount + '/' + g.targetAmount + ' ' + g.currency + ' | status=' + g.status);
   }
 
-  // 2. Все взносы
+ 
   const contribs = await prisma.contribution.findMany({
     orderBy: { timestamp: 'desc' },
     take: 10,

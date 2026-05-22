@@ -1,29 +1,22 @@
-/**
- * Тест queueFundingProgressUpdateEmail()
- *
- * Запуск: node test-funding-progress.js
- */
+
 require('dotenv').config();
 const { queueFundingProgressUpdateEmail } = require('./src/services/registryService');
 
 async function test() {
-  console.log('\n═══════════════════════════════════════════');
-  console.log('  ТЕСТ queueFundingProgressUpdateEmail()');
-  console.log('═══════════════════════════════════════════\n');
-
+  
   try {
     console.log('─── Тест 1: Прямой вызов с тестовыми данными ───\n');
 
     const result = await queueFundingProgressUpdateEmail({
-      coupleId: 1,          // замените на реальный coupleId из БД
-      giftId: 1,            // замените на реальный giftId
+      coupleId: 1,          
+      giftId: 1,           
       giftName: 'Тестовый подарок',
       fundedAmount: 50000,
       targetAmount: 100000,
       currency: 'KZT',
       progressPercent: 50,
       contributorName: 'Азат',
-      contributorId: 2,     // ID того, кто сделал взнос (исключится из списка)
+      contributorId: 2,     
     });
 
     console.log(`\n✅ Результат:`);

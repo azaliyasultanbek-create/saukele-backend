@@ -4,8 +4,8 @@ async function adminGetAllWeddings(req, res) {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
-  const status = req.query.status; // 'active', 'inactive', 'all'
-  const search = req.query.search; // поиск по имени
+  const status = req.query.status; 
+  const search = req.query.search;
 
   let where = {};
   

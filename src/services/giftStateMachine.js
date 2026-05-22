@@ -51,7 +51,7 @@ const STATE_LABELS = {
   delivered: 'Delivered / Доставлено',
 };
 
-// ─── Lock timeout for SELECT FOR UPDATE ──────────────────────────────────
+// ─── Lock timeout for optimistic concurrency ─────────────────────────────
 const LOCK_TIMEOUT_MS = 3000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -73,10 +73,11 @@ function assertValidTransition(from, to) {
   }
 }
 
-// ─── Core: Transition a gift with row-level lock (SELECT FOR UPDATE) ─────
+// ─── Core: Transition a gift with optimistic concurrency (version field) ──
 
 /**
- * Atomically transition a gift's escrowStatus using SELECT FOR UPDATE.
+ * Atomically transition a gift's escrowStatus using optimistic concurrency
+ * via the `version` field (no raw SQL).
  * 
  * @param {number}  giftId
  * @param {string}  toStatus   - target GiftStatus
@@ -88,20 +89,23 @@ function assertValidTransition(from, to) {
 async function transitionGift(giftId, toStatus, options = {}) {
   const tx = options.tx || prisma;
 
-  // 1. Lock the gift row (SELECT FOR UPDATE) and read current state
-  const lockedGifts = await tx.$queryRawUnsafe(
-    `SELECT id, status, funded_amount, target_amount, version, handling_flags
-     FROM gifts
-     WHERE id = $1
-     FOR UPDATE NOWAIT`,
-    giftId
-  );
+  // 1. Read current gift state using Prisma (no raw SQL)
+  const gift = await tx.gift.findUnique({
+    where: { id: giftId },
+    select: {
+      id: true,
+      status: true,
+      fundedAmount: true,
+      targetAmount: true,
+      version: true,
+      handlingFlags: true,
+    },
+  });
 
-  if (!lockedGifts || lockedGifts.length === 0) {
+  if (!gift) {
     throw new Error('GIFT_NOT_FOUND');
   }
 
-  const gift = lockedGifts[0];
   const fromStatus = gift.status;
 
   // 2. Validate transition
@@ -110,13 +114,24 @@ async function transitionGift(giftId, toStatus, options = {}) {
   // 3. Check business rules for specific transitions (includes logistics orchestration)
   const logisticsOutput = await validateBusinessRules(giftId, fromStatus, toStatus, { tx });
 
-  // 4. Perform the update (version bump for optimistic locking)
+  // 4. Perform the update with optimistic concurrency (version check)
   const updated = await tx.gift.update({
-    where: { id: giftId },
+    where: {
+      id: giftId,
+      version: gift.version, // optimistic lock: fails if another tx changed it
+    },
     data: {
       status: toStatus,
       version: { increment: 1 },
     },
+  }).catch((err) => {
+    // Prisma throws P2025 when record not found (version mismatch = concurrent update)
+    if (err.code === 'P2025') {
+      throw new Error(
+        'CONCURRENT_MODIFICATION: Gift was modified by another request. Please retry.'
+      );
+    }
+    throw err;
   });
 
   // 5. Attach logistics orchestration info to the returned gift
@@ -353,52 +368,48 @@ async function validateBusinessRules(giftId, fromStatus, toStatus, { tx }) {
 
 /**
  * Approve a single contribution for escrow release (mark as approved by couple).
- * Uses SELECT FOR UPDATE to prevent race conditions.
+ * Uses Prisma findUnique + include (no raw SQL).
  */
 async function approveContribution(contributionId, coupleId, options = {}) {
   const tx = options.tx || prisma;
 
-  // Lock the contribution row
-  const locked = await tx.$queryRawUnsafe(
-    `SELECT c.id, c.gift_id, c.status, c.guest_id, g.couple_id, g.status AS gift_status
-     FROM contributions c
-     JOIN gifts g ON g.id = c.gift_id
-     WHERE c.id = $1
-     FOR UPDATE NOWAIT`,
-    contributionId
-  );
+  // Read contribution + gift relation using Prisma (no raw SQL)
+  const contribution = await tx.contribution.findUnique({
+    where: { id: contributionId },
+    include: {
+      gift: {
+        select: {
+          id: true,
+          coupleId: true,
+          status: true,
+        },
+      },
+    },
+  });
 
-  if (!locked || locked.length === 0) {
+  if (!contribution) {
     throw new Error('CONTRIBUTION_NOT_FOUND');
   }
 
-  const row = locked[0];
-
   // Verify the couple owns this gift
-  if (row.couple_id !== coupleId) {
+  if (contribution.gift.coupleId !== coupleId) {
     throw new Error('FORBIDDEN: This gift does not belong to you');
   }
 
   // Contribution must be completed
-  if (row.status !== 'completed') {
+  if (contribution.status !== 'completed') {
     throw new Error('INVALID_APPROVAL: Only completed contributions can be escrow-approved');
   }
 
   // Gift must be in funded state to approve
-  if (row.gift_status !== 'funded') {
+  if (contribution.gift.status !== 'funded') {
     throw new Error(
-      `INVALID_APPROVAL: Gift must be in "funded" status to approve contributions (current: "${row.gift_status}")`
+      `INVALID_APPROVAL: Gift must be in "funded" status to approve contributions (current: "${contribution.gift.status}")`
     );
   }
 
   // ── Проверка иммутабельности ──
-  // Убеждаемся, что locked поля у взноса есть (snapshot был записан)
-  const dbContribution = await tx.contribution.findUnique({
-    where: { id: contributionId },
-    select: { lockedAt: true, lockedRate: true },
-  });
-
-  if (!dbContribution.lockedAt || !dbContribution.lockedRate) {
+  if (!contribution.lockedAt || !contribution.lockedRate) {
     throw new Error(
       `IMMUTABLE_FIELD_VIOLATION: Contribution #${contributionId} is missing ` +
       `locked_at_timestamp/locked_exchange_rate. Data integrity check failed.`
@@ -419,23 +430,27 @@ async function approveContribution(contributionId, coupleId, options = {}) {
 /**
  * Approve ALL completed contributions for a gift (bulk operation).
  * Used when transitioning from funded → purchased.
+ * Uses Prisma findUnique (no raw SQL).
  */
 async function approveAllContributions(giftId, coupleId, options = {}) {
   const tx = options.tx || prisma;
 
-  // Lock the gift row
-  const lockedGifts = await tx.$queryRawUnsafe(
-    `SELECT id, couple_id, status, handling_flags FROM gifts WHERE id = $1 FOR UPDATE NOWAIT`,
-    giftId
-  );
+  // Read gift using Prisma (no raw SQL)
+  const gift = await tx.gift.findUnique({
+    where: { id: giftId },
+    select: {
+      id: true,
+      coupleId: true,
+      status: true,
+      handlingFlags: true,
+    },
+  });
 
-  if (!lockedGifts || lockedGifts.length === 0) {
+  if (!gift) {
     throw new Error('GIFT_NOT_FOUND');
   }
 
-  const gift = lockedGifts[0];
-
-  if (gift.couple_id !== coupleId) {
+  if (gift.coupleId !== coupleId) {
     throw new Error('FORBIDDEN: This gift does not belong to you');
   }
 
@@ -446,7 +461,7 @@ async function approveAllContributions(giftId, coupleId, options = {}) {
   }
 
   // ─── Оркестрация: проверяем флаги при подтверждении выплат ──────────
-  const flags = gift.handling_flags || [];
+  const flags = gift.handlingFlags || [];
   if (Array.isArray(flags) && flags.length > 0) {
     const manifest = buildLogisticsManifest(flags);
     const complexity = calculateDeliveryComplexity(flags);

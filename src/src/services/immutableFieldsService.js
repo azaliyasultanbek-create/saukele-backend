@@ -1,23 +1,4 @@
-/**
- * Сервис для защиты имммутабельных (неизменяемых) полей.
- *
- * Концепция:
- * - Финансовые строки (Contribution) после создания становятся ИММУТАБЕЛЬНЫМИ.
- * - Поля 'locked_at_timestamp' и 'locked_exchange_rate' (а также 'amount',
- *   'exchangeRateUsed', 'currencyUsed', 'originalAmount')
- *   ЗАПРЕЩЕНО обновлять после записи в БД.
- * - Этот сервис проверяет входящие данные на попытку изменения защищённых полей
- *   и выбрасывает ошибку, если обнаруживает нарушение.
- *
- * Стратегия защиты (2 уровня):
- *   Уровень 1 — Middleware/service guard (здесь): проверка на уровне приложения.
- *   Уровень 2 — DB trigger (рекомендуется для production): дополнительная
- *               защита на уровне PostgreSQL.
- */
 
-// ─── Список иммутабельных полей модели Contribution ──────────────────────
-// После того как взнос создан (особенно со статусом 'completed'),
-// эти поля НЕ ДОЛЖНЫ меняться.
 const IMMUTABLE_FIELDS = [
   'giftId',
   'guestId',
@@ -31,8 +12,7 @@ const IMMUTABLE_FIELDS = [
   'locked_exchange_rate',
 ];
 
-// ─── Поля, которые разрешено обновлять (в определённых статусах) ─────────
-// status, escrowApprovedAt, escrowApprovedBy, kaspiPaymentId, isAnonymous
+
 const MUTABLE_FIELDS = [
   'status',
   'escrowApprovedAt',
@@ -42,11 +22,10 @@ const MUTABLE_FIELDS = [
 ];
 
 /**
- * Проверить, содержит ли объект data попытку изменить иммутабельные поля.
- *
- * @param {number} contributionId - ID взноса (для сообщения об ошибке)
- * @param {object} data - входящие данные для обновления
- * @throws {Error} IMMUTABLE_FIELD_VIOLATION — если обнаружена попытка изменить защищённое поле
+ 
+ * @param {number} contributionId 
+ * @param {object} data 
+ * @throws {Error} IMMUTABLE_FIELD_VIOLATION 
  */
 function guardImmutableFields(contributionId, data) {
   if (!data || typeof data !== 'object') return;
@@ -54,7 +33,7 @@ function guardImmutableFields(contributionId, data) {
   const violations = [];
 
   for (const key of Object.keys(data)) {
-    // Проверяем и camelCase, и snake_case варианты
+   
     const normalizedKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
                              .replace(/^([A-Z])/, (c) => c.toLowerCase());
 
@@ -81,11 +60,9 @@ function guardImmutableFields(contributionId, data) {
 }
 
 /**
- * Проверить, что для Contribution установлены оба блокирующих поля
- * (lockedAt и lockedRate) — это гарантирует, что snapshot курса был зафиксирован.
- *
- * @param {object} contribution - объект Contribution из БД
- * @throws {Error} MISSING_LOCKED_FIELDS — если поля не установлены
+ 
+ * @param {object} contribution 
+ * @throws {Error} MISSING_LOCKED_FIELDS 
  */
 function assertContributionIsLocked(contribution) {
   if (!contribution) {

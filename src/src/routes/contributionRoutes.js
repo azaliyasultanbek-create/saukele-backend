@@ -8,7 +8,7 @@ const {
 
 const router = express.Router();
 
-// ─── Создание взноса — проверяем, что гость имеет доступ к подарку ───────
+
 router.post(
   '/',
   authenticate,
@@ -18,7 +18,7 @@ router.post(
   createContribution
 );
 
-// ─── Просмотр взносов по подарку — проверяем доступ к подарку ────────────
+
 router.get(
   '/gift/:giftId',
   authenticate,

@@ -16,7 +16,7 @@ async function canAccessGift(user, gift, tx = prisma) {
   });
 
     if (!familyEntry || !Array.isArray(gift.allowedTiers)) return false;
-  // Иерархическая проверка через TIER_VISIBILITY
+
   const TIER_VISIBILITY = {
     ata_ana: ['ata_ana', 'zhien_zaran', 'kuda_zhekzhen'],
     zhien_zaran: ['zhien_zaran', 'kuda_zhekzhen'],
@@ -48,45 +48,47 @@ async function createContribution(req, res) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // ─── 1. SELECT FOR UPDATE: Lock the gift row ───────────────────────
-      const lockedGifts = await tx.$queryRawUnsafe(
-        `SELECT id, couple_id, name, target_amount, funded_amount, currency, status, allowed_tiers, image_urls, version
-         FROM gifts
-         WHERE id = $1
-         FOR UPDATE NOWAIT`,
-        parseInt(giftId)
-      );
+      const gift = await tx.gift.findUnique({
+        where: { id: parseInt(giftId) },
+        select: {
+          id: true,
+          coupleId: true,
+          name: true,
+          targetAmount: true,
+          fundedAmount: true,
+          currency: true,
+          status: true,
+          allowedTiers: true,
+          imageUrls: true,
+          version: true,
+        },
+      });
 
-      if (!lockedGifts || lockedGifts.length === 0) {
+      if (!gift) {
         throw new Error('GIFT_NOT_FOUND');
       }
 
-      const gift = lockedGifts[0];
-
-      // ─── 2. Validate state machine: only funding/pending accepts contributions ──
       if (gift.status === 'funded' || gift.status === 'purchased' || gift.status === 'delivered') {
         throw new Error('GIFT_CLOSED');
       }
 
-      // ─── 3. Access control ───────────────────────────────────────────────
       const giftObj = {
         id: gift.id,
-        coupleId: gift.couple_id,
+        coupleId: gift.coupleId,
         name: gift.name,
-        allowedTiers: gift.allowed_tiers,
+        allowedTiers: gift.allowedTiers,
       };
       const hasAccess = await canAccessGift(req.user, giftObj, tx);
       if (!hasAccess) {
         throw new Error('GIFT_FORBIDDEN');
       }
 
-      // ─── 4. Currency conversion ──────────────────────────────────────────
       const conversion = convert(amount, paymentCurrency, gift.currency);
       const amountInGiftCurrency = conversion.amount;
       const exchangeRate = conversion.rate;
 
-      // ─── 5. Validate limits using the locked (fresh) funded_amount ───────
-      const remaining = Number(gift.target_amount) - Number(gift.funded_amount);
+            
+      const remaining = Number(gift.targetAmount) - Number(gift.fundedAmount);
       if (remaining <= 0) {
         throw new Error('GIFT_ALREADY_FUNDED');
       }
@@ -98,7 +100,7 @@ async function createContribution(req, res) {
         throw new Error(`MAX_CONTRIBUTION_EXCEEDED:${maxInPaymentCurrency.amount}:${paymentCurrency}`);
       }
 
-      // ─── 6. Create contribution (atomic) ─────────────────────────────────
+      
       const contribution = await tx.contribution.create({
         data: {
           giftId: parseInt(giftId),
@@ -112,8 +114,8 @@ async function createContribution(req, res) {
         }
       });
 
-      // ─── 7. Atomically update funded_amount (we have the lock) ───────────
-      const newFundedAmount = Number(gift.funded_amount) + amountInGiftCurrency;
+           
+      const newFundedAmount = Number(gift.fundedAmount) + amountInGiftCurrency;
 
       const updatedGift = await tx.gift.update({
         where: { id: parseInt(giftId) },
@@ -123,15 +125,15 @@ async function createContribution(req, res) {
         }
       });
 
-      // ─── 8. State machine transition if fully funded ─────────────────────
-      if (newFundedAmount >= Number(gift.target_amount)) {
+            
+      if (newFundedAmount >= Number(gift.targetAmount)) {
         if (gift.status === 'pending' || gift.status === 'funding') {
           await transitionGift(parseInt(giftId), 'funded', { tx });
           const finalGift = await tx.gift.findUnique({ where: { id: parseInt(giftId) } });
           return { contribution, gift: finalGift, conversion };
         }
       } else if (gift.status === 'pending') {
-        // First contribution: transition pending → funding
+      
         await transitionGift(parseInt(giftId), 'funding', { tx });
         const finalGift = await tx.gift.findUnique({ where: { id: parseInt(giftId) } });
         return { contribution, gift: finalGift, conversion };
@@ -140,7 +142,7 @@ async function createContribution(req, res) {
       return { contribution, gift: updatedGift, conversion };
     });
 
-    // ─── 9. Post-transaction notifications ──────────────────────────────
+   
     if (req.user.email) {
       await emailQueue.add('contribution-confirmation', {
         type: 'contribution-confirmation',
@@ -252,15 +254,6 @@ async function createContribution(req, res) {
       return res.status(409).json({
         code: 'INVALID_STATE_TRANSITION',
         message: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Handle FOR UPDATE lock conflicts (PostgreSQL error code 55P03)
-    if (error.code === '55P03' || (error.message && error.message.includes('could not obtain lock'))) {
-      return res.status(429).json({
-        code: 'LOCK_CONFLICT',
-        message: 'Too many concurrent contributions. Please try again.',
         timestamp: new Date().toISOString()
       });
     }

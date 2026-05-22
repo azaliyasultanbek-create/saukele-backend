@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function check() {
-  // Все взносы azi (id=8) и DARI (id=13)
+  
   const contribs = await prisma.contribution.findMany({
     where: {
       guestId: { in: [8, 13] }
@@ -24,7 +24,7 @@ async function check() {
     console.log('  Нет взносов');
   }
 
-  // Проверим все подарки у coupleId=11
+ 
   const gifts = await prisma.gift.findMany({
     where: { coupleId: 11 }
   });
@@ -33,7 +33,7 @@ async function check() {
     console.log('  id=' + g.id + ' | name="' + g.name + '" | funded=' + g.fundedAmount + '/' + g.targetAmount + ' | status=' + g.status);
   }
 
-  // Проверим у coupleId=10
+  
   const gifts10 = await prisma.gift.findMany({
     where: { coupleId: 10 }
   });

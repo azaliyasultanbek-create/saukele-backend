@@ -14,7 +14,7 @@ async function main() {
   }
 
   if (email === '--all') {
-    // Delete all related data first
+   
     await prisma.refreshToken.deleteMany();
     await prisma.userToken.deleteMany();
     await prisma.contribution.deleteMany();
@@ -32,7 +32,7 @@ async function main() {
 
     console.log(`Deleting user: ${user.fullName} (${user.email})`);
 
-    // Delete in correct order
+   
     await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
     await prisma.userToken.deleteMany({ where: { userId: user.id } });
     await prisma.user.delete({ where: { id: user.id } });
