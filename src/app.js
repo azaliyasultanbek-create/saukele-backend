@@ -17,7 +17,7 @@ app.get("/", (req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 const authLimiter = rateLimit({
- windowMs: 60 * 1000, 
+windowMs: 15 * 60 * 1000,
 max: 5, 
   message: {
     code: 'TOO_MANY_REQUESTS',
