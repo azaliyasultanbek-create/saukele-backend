@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: saukele-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: saukele
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: saukele-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saukele-backend
+    ports:
+      - "4000:3000"
+    command: sh -c "npx prisma migrate deploy && node src/server.js"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - USE_MOCK_REDIS=false
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/saukele
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  email-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saukele-email-worker
+    command: ["node", "src/workers/emailWorker.js"]
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - USE_MOCK_REDIS=false
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/saukele
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  currency-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saukele-currency-worker
+    command: ["node", "src/workers/currencyWorker.js"]
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - USE_MOCK_REDIS=false
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/saukele
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

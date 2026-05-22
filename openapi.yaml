@@ -1,0 +1,753 @@
+openapi: 3.0.3
+info:
+  title: Saukele Backend API
+  version: 2.0.0
+  description: Production-oriented API for wedding profiles, gift funding, kinship-based gift access, email verification, contributions, currencies, and queue visibility.
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+tags:
+  - name: Auth
+  - name: Couples
+  - name: Gifts
+  - name: Contributions
+  - name: Family
+  - name: Currency
+  - name: Admin
+paths:
+  /health:
+    get:
+      tags: [Admin]
+      summary: Health check
+      responses:
+        "200":
+          description: Server is running
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a user and send email verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              phone: "77071234567"
+              email: "couple@example.com"
+              password: "StrongPass123"
+              fullName: "Aruzhan Nurbol"
+              role: "couple"
+      responses:
+        "201":
+          description: User registered and verification email queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Verify email using 6-digit code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: Email verified
+        "400":
+          $ref: "#/components/responses/ValidationError"
+    get:
+      tags: [Auth]
+      summary: Legacy email verification using token link
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Email verified
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with phone and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              phone: "77071234567"
+              password: "StrongPass123"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Email is not verified
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate refresh token and issue new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: New access and refresh tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: bearer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke current refresh token
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logout successful
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Queue password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Generic response to prevent account enumeration
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password using email token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password reset successful
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /couples/weddings:
+    get:
+      tags: [Couples]
+      summary: List active weddings
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Paginated wedding list
+
+  /couples/{coupleId}:
+    get:
+      tags: [Couples]
+      summary: Get wedding profile
+      parameters:
+        - $ref: "#/components/parameters/CoupleIdParam"
+      responses:
+        "200":
+          description: Wedding profile
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Couples]
+      summary: Update own wedding profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CoupleIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoupleProfileInput"
+      responses:
+        "200":
+          description: Profile updated
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /couples/profile:
+    post:
+      tags: [Couples]
+      summary: Create wedding profile for current couple
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoupleProfileInput"
+            example:
+              partner2Name: "Dias"
+              weddingDate: "2026-09-12T10:00:00.000Z"
+              venue: "Almaty, Arman Hall"
+              story: "We met at university."
+      responses:
+        "201":
+          description: Profile created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /gifts:
+    get:
+      tags: [Gifts]
+      summary: List current couple gifts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Paginated gifts
+    post:
+      tags: [Gifts]
+      summary: Create gift for current couple
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GiftInput"
+            example:
+              name: "Refrigerator"
+              description: "Samsung two-door refrigerator"
+              targetAmount: 350000
+              currency: "KZT"
+              allowedTiers: ["parents", "siblings"]
+      responses:
+        "201":
+          description: Gift created
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /gifts/couple/{coupleId}:
+    get:
+      tags: [Gifts]
+      summary: List gifts visible to current user for a wedding
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CoupleIdParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Gifts filtered by kinship tier
+
+  /gifts/{giftId}:
+    get:
+      tags: [Gifts]
+      summary: Get gift details if visible to current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GiftIdParam"
+      responses:
+        "200":
+          description: Gift details
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      tags: [Gifts]
+      summary: Update own gift
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GiftIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GiftInput"
+      responses:
+        "200":
+          description: Gift updated
+    delete:
+      tags: [Gifts]
+      summary: Mark own gift as paid out
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GiftIdParam"
+      responses:
+        "204":
+          description: Gift deleted
+
+  /family/members:
+    post:
+      tags: [Family]
+      summary: Add or update guest kinship for current couple
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [guestPhone, kinshipTier]
+              properties:
+                guestPhone:
+                  type: string
+                  example: "77079998877"
+                kinshipTier:
+                  type: string
+                  enum: [ata_ana, zhien_zaran, kuda_zhekzhen]
+                parentId:
+                  type: integer
+                  description: ID родительского узла в генеалогическом древе
+      responses:
+        "201":
+          description: Family member upserted
+
+  /family/my-kinship:
+    get:
+      tags: [Family]
+      summary: Get current user's first kinship assignment
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Kinship info
+
+  /family/gifts:
+    get:
+      tags: [Family]
+      summary: List gifts visible through current user's kinship
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Paginated visible gifts
+
+  /family/tree/{coupleId}:
+    get:
+      tags: [Family]
+      summary: Get hierarchical genealogical tree via recursive CTE
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CoupleIdParam"
+      responses:
+        "200":
+          description: Genealogical tree with categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  couple:
+                    type: object
+                  tree:
+                    type: array
+                    items:
+                      type: object
+                  groupedByCategory:
+                    type: array
+                    items:
+                      type: object
+                  registries:
+                    type: array
+                  meta:
+                    type: object
+
+  /family/registry:
+    post:
+      tags: [Family]
+      summary: Create a kinship registry entry (traditional category)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category]
+              properties:
+                name:
+                  type: string
+                  example: "Ата-ана"
+                description:
+                  type: string
+                  example: "Родители и старшие родственники"
+                category:
+                  type: string
+                  enum: [ATA_ANA, ZHIEN_ZhARAN, KUDA_ZHEKZhEN]
+                parentId:
+                  type: integer
+      responses:
+        "201":
+          description: Registry entry created
+
+  /family/registry/{coupleId}:
+    get:
+      tags: [Family]
+      summary: Get kinship registry entries for a couple
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CoupleIdParam"
+      responses:
+        "200":
+          description: Registry entries with hierarchical tree
+
+  /contributions:
+    post:
+      tags: [Contributions]
+      summary: Contribute to a visible gift
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContributionInput"
+            example:
+              giftId: 1
+              amount: 25000
+              currency: "KZT"
+              isAnonymous: false
+      responses:
+        "201":
+          description: Contribution completed and email notification queued
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /contributions/gift/{giftId}:
+    get:
+      tags: [Contributions]
+      summary: List contributions for a visible gift
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GiftIdParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Paginated contributions
+
+  /currencies:
+    get:
+      tags: [Currency]
+      summary: Get supported currencies and current cached rates
+      responses:
+        "200":
+          description: Currency list and rates
+
+  /admin/queues:
+    get:
+      tags: [Admin]
+      summary: Get background queue counts
+      parameters:
+        - in: header
+          name: x-admin-api-key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Queue visibility information
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitParam:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    CoupleIdParam:
+      in: path
+      name: coupleId
+      required: true
+      schema:
+        type: integer
+    GiftIdParam:
+      in: path
+      name: giftId
+      required: true
+      schema:
+        type: integer
+  responses:
+    ValidationError:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing, invalid, or expired credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Authenticated user is not allowed to perform this action
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Request conflicts with existing state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [phone, email, password, fullName]
+      properties:
+        phone:
+          type: string
+          pattern: "^7[0-9]{10}$"
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [couple, guest]
+          default: guest
+    RegisterResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        timestamp:
+          type: string
+          format: date-time
+    LoginRequest:
+      type: object
+      required: [phone, password]
+      properties:
+        phone:
+          type: string
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        phone:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [couple, guest, admin]
+    CoupleProfileInput:
+      type: object
+      required: [partner2Name, weddingDate]
+      properties:
+        partner2Name:
+          type: string
+        weddingDate:
+          type: string
+          format: date-time
+        venue:
+          type: string
+          nullable: true
+        story:
+          type: string
+          nullable: true
+        coverPhotoUrl:
+          type: string
+          nullable: true
+    GiftInput:
+      type: object
+      required: [name, targetAmount]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        targetAmount:
+          type: integer
+          minimum: 1000
+        currency:
+          type: string
+          enum: [KZT, EUR, USD]
+        allowedTiers:
+          type: array
+          items:
+            type: string
+            enum: [ata_ana, zhien_zaran, kuda_zhekzhen]
+        imageUrls:
+          type: array
+          items:
+            type: string
+    ContributionInput:
+      type: object
+      required: [giftId, amount]
+      properties:
+        giftId:
+          type: integer
+        amount:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+          enum: [KZT, EUR, USD]
+        isAnonymous:
+          type: boolean
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

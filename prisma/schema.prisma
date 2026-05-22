@@ -1,0 +1,202 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  couple
+  guest
+  admin
+}
+
+enum GiftStatus {
+  pending
+  funding
+  funded
+  purchased
+  delivered
+}
+
+enum ContributionStatus {
+  pending
+  completed
+  failed
+  refunded
+}
+
+enum Currency {
+  KZT
+  EUR
+  USD
+}
+
+enum UserTokenType {
+  email_verification
+  password_reset
+}
+
+enum KinshipCategory {
+  ATA_ANA
+  ZHIEN_ZhARAN
+  KUDA_ZHEKZhEN
+}
+
+model User {
+  id              Int              @id @default(autoincrement())
+  phone           String           @unique
+  email           String?          @unique
+  emailVerified   Boolean          @default(false) @map("email_verified")
+  emailVerifiedAt DateTime?        @map("email_verified_at")
+  role            UserRole         @default(guest)
+  passwordHash    String           @map("password_hash")
+  fullName        String?          @map("full_name")
+  isVerified      Boolean          @default(false) @map("is_verified")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  coupleProfile   CoupleProfile?
+  guestEntries    FamilyTree[]
+  contributions   Contribution[]
+  refreshTokens   RefreshToken[]
+  userTokens      UserToken[]
+
+  @@map("users")
+}
+
+model UserToken {
+  id         Int           @id @default(autoincrement())
+  userId     Int           @map("user_id")
+  tokenHash  String        @unique @map("token_hash")
+  type       UserTokenType
+  expiresAt  DateTime      @map("expires_at")
+  usedAt     DateTime?     @map("used_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("user_tokens")
+}
+
+model CoupleProfile {
+  coupleId        Int              @id @map("couple_id")
+  partner2Name    String           @map("partner2_name")
+  weddingDate     DateTime         @map("wedding_date")
+  venue           String?
+  story           String?
+  coverPhotoUrl   String?          @map("cover_photo_url")
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+      user            User             @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  gifts           Gift[]
+  familyTree      FamilyTree[]
+  kinshipRegistry KinshipRegistry[]
+
+  @@map("couples")
+}
+
+model FamilyTree {
+  id              Int              @id @default(autoincrement())
+  coupleId        Int              @map("couple_id")
+  guestId         Int              @map("guest_id")
+  kinshipTier     String           @map("kinship_tier")
+  category        KinshipCategory  @map("category")
+  parentId        Int?             @map("parent_id")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  couple          CoupleProfile    @relation(fields: [coupleId], references: [coupleId], onDelete: Cascade)
+  guest           User             @relation(fields: [guestId], references: [id])
+  parent          FamilyTree?      @relation("FamilyHierarchy", fields: [parentId], references: [id])
+  children        FamilyTree[]     @relation("FamilyHierarchy")
+
+  @@unique([coupleId, guestId])
+  @@index([guestId, coupleId])
+  @@index([category])
+  @@map("family_tree")
+}
+
+model KinshipRegistry {
+  id              Int              @id @default(autoincrement())
+  coupleId        Int              @map("couple_id")
+  name            String
+  description     String?
+  category        KinshipCategory  @map("category")
+  parentId        Int?             @map("parent_id")
+  sortOrder       Int              @default(0) @map("sort_order")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  couple          CoupleProfile    @relation(fields: [coupleId], references: [coupleId], onDelete: Cascade)
+  parent          KinshipRegistry? @relation("RegistryHierarchy", fields: [parentId], references: [id])
+  children        KinshipRegistry[] @relation("RegistryHierarchy")
+
+  @@unique([coupleId, name])
+  @@index([coupleId, category])
+  @@map("kinship_registry")
+}
+
+model Gift {
+  id              Int              @id @default(autoincrement())
+  coupleId        Int              @map("couple_id")
+  name            String
+  description     String?
+  targetAmount    Int              @map("target_amount")
+  fundedAmount    Int              @default(0) @map("funded_amount")
+  currency        Currency         @default(KZT)
+  status          GiftStatus       @default(pending)
+  version         Int              @default(1) @map("version")
+    allowedTiers    Json             @default("[]") @map("allowed_tiers")
+  imageUrls       Json             @default("[]") @map("image_urls")
+  handlingFlags   Json             @default("[]") @map("handling_flags")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  couple          CoupleProfile    @relation(fields: [coupleId], references: [coupleId], onDelete: Cascade)
+  contributions   Contribution[]
+
+  @@index([coupleId, status])
+  @@map("gifts")
+}
+
+model Contribution {
+  id                Int                @id @default(autoincrement())
+  giftId            Int                @map("gift_id")
+  guestId           Int                @map("guest_id")
+  amount            Int
+  exchangeRateUsed  Float              @default(1.0) @map("exchange_rate_used")
+  currencyUsed      Currency           @map("currency_used")
+  originalAmount    Int                @map("original_amount")
+  status            ContributionStatus @default(pending)
+  kaspiPaymentId    String?            @unique @map("kaspi_payment_id")
+  isAnonymous       Boolean            @default(false) @map("is_anonymous")
+    escrowApprovedAt  DateTime?          @map("escrow_approved_at")
+  escrowApprovedBy  Int?               @map("escrow_approved_by")
+  timestamp         DateTime           @default(now())
+  lockedAt          DateTime?          @map("locked_at_timestamp")
+  lockedRate        Float?             @map("locked_exchange_rate")
+
+  gift              Gift               @relation(fields: [giftId], references: [id], onDelete: Cascade)
+  guest             User               @relation(fields: [guestId], references: [id])
+
+  @@index([giftId, status])
+  @@map("contributions")
+}
+
+model RefreshToken {
+  id              Int              @id @default(autoincrement())
+  token           String           @unique
+  userId          Int              @map("user_id")
+  expiresAt       DateTime         @map("expires_at")
+  isRevoked       Boolean          @default(false) @map("is_revoked")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}

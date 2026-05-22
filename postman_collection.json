@@ -1,0 +1,209 @@
+{
+  "info": {
+    "name": "Saukele Pre-Defense API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "adminApiKey", "value": "admin_secure_key_placeholder" },
+    { "key": "coupleId", "value": "1" },
+    { "key": "giftId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Auth - Register Couple",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"77071234567\",\n  \"email\": \"couple@example.com\",\n  \"password\": \"StrongPass123\",\n  \"fullName\": \"Aruzhan Nurbol\",\n  \"role\": \"couple\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Auth - Verify Email Code",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/verify-email",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"couple@example.com\",\n  \"code\": \"123456\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"77071234567\",\n  \"password\": \"StrongPass123\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Auth - Refresh",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/refresh",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Auth - Me",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/auth/me"
+      }
+    },
+    {
+      "name": "Auth - Forgot Password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/forgot-password",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"couple@example.com\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Auth - Reset Password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/reset-password",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"reset-token-from-email\",\n  \"password\": \"NewStrongPass123\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Couples - Create Profile",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": "{{baseUrl}}/couples/profile",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"partner2Name\": \"Dias\",\n  \"weddingDate\": \"2026-09-12T10:00:00.000Z\",\n  \"venue\": \"Almaty, Arman Hall\",\n  \"story\": \"We met at university.\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Couples - List Weddings",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/couples/weddings?page=1&limit=10"
+      }
+    },
+    {
+      "name": "Gifts - Create Gift",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": "{{baseUrl}}/gifts",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Refrigerator\",\n  \"description\": \"Samsung refrigerator\",\n  \"targetAmount\": 350000,\n  \"currency\": \"KZT\",\n  \"allowedTiers\": [\"parents\", \"siblings\"]\n}"
+        }
+      }
+    },
+    {
+      "name": "Gifts - Visible By Wedding",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/gifts/couple/{{coupleId}}?page=1&limit=10"
+      }
+    },
+    {
+      "name": "Gifts - Detail",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/gifts/{{giftId}}"
+      }
+    },
+    {
+      "name": "Family - Add Member",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": "{{baseUrl}}/family/members",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"guestPhone\": \"77079998877\",\n  \"kinshipTier\": \"parents\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Family - My Kinship",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/family/my-kinship"
+      }
+    },
+    {
+      "name": "Contributions - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "url": "{{baseUrl}}/contributions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"giftId\": {{giftId}},\n  \"amount\": 25000,\n  \"currency\": \"KZT\",\n  \"isAnonymous\": false\n}"
+        }
+      }
+    },
+    {
+      "name": "Currencies - List",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/currencies"
+      }
+    },
+    {
+      "name": "Admin - Queue Counts",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-admin-api-key", "value": "{{adminApiKey}}" }],
+        "url": "{{baseUrl}}/admin/queues"
+      }
+    },
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+.weddings-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.weddings-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.weddings-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 36px;
+  color: #333;
+}
+
+.weddings-header p {
+  font-size: 18px;
+  color: #666;
+}
+
+.weddings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.wedding-card {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s, box-shadow 0.3s;
+  text-decoration: none;
+  color: inherit;
+}
+
+.wedding-details-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) 1fr;
+  gap: 28px;
+  align-items: stretch;
+  background: white;
+  border: 1px solid #e6e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 8px 24px rgba(31, 41, 55, 0.08);
+}
+
+.wedding-details-cover {
+  min-height: 260px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  background-color: #e6e8f0;
+}
+
+.wedding-details-content h1 {
+  margin: 0 0 12px;
+  color: #202433;
+  font-size: 34px;
+}
+
+.wedding-details-content p {
+  color: #616b7f;
+  line-height: 1.6;
+}
+
+.wedding-story-full {
+  margin-top: 18px;
+}
+
+.kinship-badge {
+  display: inline-flex;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-weight: 700;
+}
+
+.kinship-help {
+  background: #fff;
+  border: 1px solid #e6e8f0;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 28px;
+}
+
+.kinship-help h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  color: #202433;
+}
+
+.kinship-help p {
+  margin: 0;
+  color: #616b7f;
+  line-height: 1.5;
+}
+
+.empty-state.compact {
+  padding: 24px 20px;
+  margin-bottom: 24px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+}
+
+.gift-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.gift-mini-progress {
+  margin-top: 18px;
+}
+
+.gift-mini-progress p {
+  margin: 8px 0 0;
+  color: #616b7f;
+  font-weight: 700;
+}
+
+.tier-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tier-list span {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wedding-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.wedding-cover {
+  height: 200px;
+  background-size: cover;
+  background-position: center;
+  background-color: #e0e0e0;
+}
+
+.wedding-content {
+  padding: 24px;
+}
+
+.wedding-title {
+  margin: 0 0 16px 0;
+  font-size: 22px;
+  color: #333;
+}
+
+.wedding-date,
+.wedding-venue {
+  font-size: 15px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.wedding-story {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #999;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.page-info {
+  color: #666;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .weddings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wedding-details-hero {
+    grid-template-columns: 1fr;
+  }
+}
