@@ -66,10 +66,22 @@ async function refreshRates() {
     try {
       const apiRates = await fetchRatesFromAPI();
       for (const currency of Object.keys(SUPPORTED_CURRENCIES)) {
-        if (apiRates[currency]) {
-          newRates[currency] = apiRates[currency];
-        }
-      }
+
+  if (currency === BASE_CURRENCY) {
+    newRates[currency] = 1;
+    continue;
+  }
+
+  if (apiRates[currency]) {
+    // API возвращает:
+    // 1 KZT = X USD
+
+    // Нам нужно:
+    // 1 USD = Y KZT
+
+    newRates[currency] = 1 / apiRates[currency];
+  }
+}
       console.log(` [Currency] Rates updated from API:`, JSON.stringify(newRates));
     } catch (error) {
       console.warn(` [Currency] API unavailable, using fallback rates: ${error.message}`);
@@ -77,7 +89,7 @@ async function refreshRates() {
   } else {
     console.log(` [Currency] Using custom rates from .env:`, JSON.stringify(newRates));
   }
-
+console.log(cachedRates);
   cachedRates = newRates;
   lastFetchTime = Date.now();
 }
@@ -143,10 +155,13 @@ function convert(amount, fromCurrency, toCurrency) {
  */
 function formatAmount(amount, currencyCode) {
   const info = SUPPORTED_CURRENCIES[currencyCode];
+
   if (!info) return `${amount} ${currencyCode}`;
+
   const formatted = info.decimals > 0
     ? (amount / (10 ** (2 - info.decimals))).toFixed(info.decimals)
     : amount.toString();
+
   return `${info.symbol} ${formatted}`;
 }
 
@@ -186,40 +201,25 @@ function snapshotRate(fromCurrency, toCurrency, amount = null) {
   if (!isCurrencySupported(fromCurrency)) {
     throw new Error(`UNSUPPORTED_CURRENCY: ${fromCurrency}`);
   }
+
   if (!isCurrencySupported(toCurrency)) {
     throw new Error(`UNSUPPORTED_CURRENCY: ${toCurrency}`);
   }
 
-  // Получаем курс ПРЯМО СЕЙЧАС — блокируем значение
-  const rate = fromCurrency === toCurrency
-    ? 1
-    : getRate(fromCurrency) / getRate(toCurrency);
-
-  const roundedRate = Math.round(rate * 10000) / 10000;
-  const rateTimestamp = new Date().toISOString();
-
-  let convertedAmount = null;
-  if (amount !== null) {
-    convertedAmount = Math.round(amount * rate);
-  }
+  const conversion = convert(
+    amount || 1,
+    fromCurrency,
+    toCurrency
+  );
 
   return {
-    rate: roundedRate,
-    rateTimestamp,
+    rate: conversion.rate,
+    rateTimestamp: new Date().toISOString(),
     fromCurrency,
     toCurrency,
-    convertedAmount,
+    convertedAmount:
+      amount !== null
+        ? conversion.amount
+        : null,
   };
 }
-
-module.exports = {
-  SUPPORTED_CURRENCIES,
-  BASE_CURRENCY,
-  getSupportedCurrencies,
-  isCurrencySupported,
-  refreshRates,
-  getRate,
-  convert,
-  formatAmount,
-  snapshotRate,
-};

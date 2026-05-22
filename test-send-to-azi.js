@@ -1,7 +1,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-// Устанавливаем mock-режим
+
 process.env.USE_MOCK_REDIS = 'true';
 
 async function main() {

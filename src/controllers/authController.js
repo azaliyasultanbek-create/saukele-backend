@@ -127,7 +127,7 @@ async function forgotPassword(req, res) {
     const result = await createPasswordResetToken(email);
 
     if (result?.token) {
-      await emailQueue.add('password-reset', {
+      await emailQueue.add('password-reset-email', {
         type: 'password-reset',
         to: email,
         data: { token: result.token }

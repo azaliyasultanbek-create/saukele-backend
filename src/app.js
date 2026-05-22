@@ -8,6 +8,12 @@ const path = require('path');
 const env = require('./config/env');
 const app = express();
 const swaggerDocument = YAML.load(path.join(__dirname, '../openapi.yaml'));
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Saukele API is running"
+  });
+});
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 const authLimiter = rateLimit({

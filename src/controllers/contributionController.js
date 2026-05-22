@@ -1,7 +1,8 @@
 const { prisma } = require('../config/database');
-const { isCurrencySupported, convert, formatAmount } = require('../services/currencyService');
+const { isCurrencySupported, convert, formatAmount, snapshotRate } = require('../services/currencyService');
 const { emailQueue } = require('../queues/emailQueue');
-const { transitionGift, STATE_LABELS } = require('../services/giftStateMachine');
+const { guardImmutableFields, assertContributionIsLocked } = require('../services/immutableFieldsService');
+const { annotateFlags, buildDeliveryNote, getPackagingRequirements } = require('../services/handlingFlagsService');
 
 const VALID_CURRENCIES = ['KZT', 'EUR', 'USD'];
 
@@ -16,7 +17,7 @@ async function canAccessGift(user, gift, tx = prisma) {
   });
 
     if (!familyEntry || !Array.isArray(gift.allowedTiers)) return false;
-  // Иерархическая проверка через TIER_VISIBILITY
+ 
   const TIER_VISIBILITY = {
     ata_ana: ['ata_ana', 'zhien_zaran', 'kuda_zhekzhen'],
     zhien_zaran: ['zhien_zaran', 'kuda_zhekzhen'],
@@ -37,7 +38,7 @@ async function createContribution(req, res) {
       timestamp: new Date().toISOString()
     });
   }
-
+  
   if (!giftId || !amount || amount < 1) {
     return res.status(400).json({
       code: 'VALIDATION_ERROR',
@@ -45,102 +46,78 @@ async function createContribution(req, res) {
       timestamp: new Date().toISOString()
     });
   }
-
+  
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // ─── 1. SELECT FOR UPDATE: Lock the gift row ───────────────────────
-      const lockedGifts = await tx.$queryRawUnsafe(
-        `SELECT id, couple_id, name, target_amount, funded_amount, currency, status, allowed_tiers, image_urls, version
-         FROM gifts
-         WHERE id = $1
-         FOR UPDATE NOWAIT`,
-        parseInt(giftId)
-      );
-
-      if (!lockedGifts || lockedGifts.length === 0) {
+      const gift = await tx.gift.findUnique({
+        where: { id: giftId }
+      });
+      
+      if (!gift) {
         throw new Error('GIFT_NOT_FOUND');
       }
-
-      const gift = lockedGifts[0];
-
-      // ─── 2. Validate state machine: only funding/pending accepts contributions ──
-      if (gift.status === 'funded' || gift.status === 'purchased' || gift.status === 'delivered') {
-        throw new Error('GIFT_CLOSED');
-      }
-
-      // ─── 3. Access control ───────────────────────────────────────────────
-      const giftObj = {
-        id: gift.id,
-        coupleId: gift.couple_id,
-        name: gift.name,
-        allowedTiers: gift.allowed_tiers,
-      };
-      const hasAccess = await canAccessGift(req.user, giftObj, tx);
-      if (!hasAccess) {
-        throw new Error('GIFT_FORBIDDEN');
-      }
-
-      // ─── 4. Currency conversion ──────────────────────────────────────────
-      const conversion = convert(amount, paymentCurrency, gift.currency);
-      const amountInGiftCurrency = conversion.amount;
-      const exchangeRate = conversion.rate;
-
-      // ─── 5. Validate limits using the locked (fresh) funded_amount ───────
-      const remaining = Number(gift.target_amount) - Number(gift.funded_amount);
-      if (remaining <= 0) {
+      
+      if (gift.status === 'funded' || gift.status === 'paid_out') {
         throw new Error('GIFT_ALREADY_FUNDED');
       }
 
-      const maxAllowed = Math.floor(remaining * 0.8);
-
-      if (amountInGiftCurrency > maxAllowed) {
-        const maxInPaymentCurrency = convert(maxAllowed, gift.currency, paymentCurrency);
-        throw new Error(`MAX_CONTRIBUTION_EXCEEDED:${maxInPaymentCurrency.amount}:${paymentCurrency}`);
+      const hasAccess = await canAccessGift(req.user, gift, tx);
+      if (!hasAccess) {
+        throw new Error('GIFT_FORBIDDEN');
       }
+      
+            
+            const rateSnapshot = snapshotRate(
+  paymentCurrency,
+  gift.currency,
+  amount
+);
 
-      // ─── 6. Create contribution (atomic) ─────────────────────────────────
+const amountInGiftCurrency =
+  rateSnapshot.convertedAmount;
+
+
+
+      const exchangeRate = rateSnapshot.rate;
+      const lockedTimestamp = new Date(rateSnapshot.rateTimestamp);
+      
+            const remaining = gift.targetAmount - gift.fundedAmount;
+            if (amountInGiftCurrency > remaining) {
+              throw new Error(`MAX_CONTRIBUTION_EXCEEDED:${remaining}:${paymentCurrency}`);
+            }
+
       const contribution = await tx.contribution.create({
         data: {
-          giftId: parseInt(giftId),
+          giftId,
           guestId,
           amount: amountInGiftCurrency,
           exchangeRateUsed: exchangeRate,
           currencyUsed: paymentCurrency,
           originalAmount: amount,
           status: 'completed',
-          isAnonymous: isAnonymous || false
+          isAnonymous: isAnonymous || false,
+          
+          lockedAt: lockedTimestamp,
+          lockedRate: exchangeRate,
         }
       });
-
-      // ─── 7. Atomically update funded_amount (we have the lock) ───────────
-      const newFundedAmount = Number(gift.funded_amount) + amountInGiftCurrency;
-
+      
+      
+      const newFundedAmount = gift.fundedAmount + amountInGiftCurrency;
+      const newStatus = newFundedAmount >= gift.targetAmount ? 'funded' : 'funding';
+      
       const updatedGift = await tx.gift.update({
-        where: { id: parseInt(giftId) },
+        where: { id: giftId },
         data: {
           fundedAmount: newFundedAmount,
-          version: { increment: 1 },
+          status: newStatus
         }
       });
-
-      // ─── 8. State machine transition if fully funded ─────────────────────
-      if (newFundedAmount >= Number(gift.target_amount)) {
-        if (gift.status === 'pending' || gift.status === 'funding') {
-          await transitionGift(parseInt(giftId), 'funded', { tx });
-          const finalGift = await tx.gift.findUnique({ where: { id: parseInt(giftId) } });
-          return { contribution, gift: finalGift, conversion };
-        }
-      } else if (gift.status === 'pending') {
-        // First contribution: transition pending → funding
-        await transitionGift(parseInt(giftId), 'funding', { tx });
-        const finalGift = await tx.gift.findUnique({ where: { id: parseInt(giftId) } });
-        return { contribution, gift: finalGift, conversion };
-      }
-
-      return { contribution, gift: updatedGift, conversion };
+      
+      return { contribution, gift: updatedGift };
     });
 
-    // ─── 9. Post-transaction notifications ──────────────────────────────
+
     if (req.user.email) {
       await emailQueue.add('contribution-confirmation', {
         type: 'contribution-confirmation',
@@ -152,6 +129,7 @@ async function createContribution(req, res) {
         }
       });
     }
+
 
     if (result.gift.status === 'funded') {
       const couple = await prisma.coupleProfile.findUnique({
@@ -172,7 +150,7 @@ async function createContribution(req, res) {
       }
     }
 
-    res.status(201).json({
+        res.status(201).json({
       message: 'Contribution successful',
       contribution: {
         id: result.contribution.id,
@@ -183,9 +161,13 @@ async function createContribution(req, res) {
         paidCurrency: result.contribution.currencyUsed,
         exchangeRate: result.contribution.exchangeRateUsed,
         isAnonymous: result.contribution.isAnonymous,
-        timestamp: result.contribution.timestamp
+        timestamp: result.contribution.timestamp,
+       
+        lockedAt: result.contribution.lockedAt,
+        lockedRate: result.contribution.lockedRate,
+        rateTimestamp: result.contribution.lockedAt,
       },
-      gift: {
+            gift: {
         id: result.gift.id,
         fundedAmount: result.gift.fundedAmount,
         targetAmount: result.gift.targetAmount,
@@ -193,13 +175,17 @@ async function createContribution(req, res) {
         remainingAmount: result.gift.targetAmount - result.gift.fundedAmount,
         progressPercent: (result.gift.fundedAmount / result.gift.targetAmount) * 100,
         status: result.gift.status,
-        statusLabel: STATE_LABELS[result.gift.status]
+        
+        handlingFlags: result.gift.handlingFlags || [],
+        handlingFlagsInfo: annotateFlags(result.gift.handlingFlags || []),
+        deliveryNote: buildDeliveryNote(result.gift.handlingFlags || []),
+        packagingRequirements: getPackagingRequirements(result.gift.handlingFlags || []),
       }
     });
-
+    
   } catch (error) {
     console.error('Contribution error:', error);
-
+    
     if (error.message === 'GIFT_NOT_FOUND') {
       return res.status(404).json({
         code: 'NOT_FOUND',
@@ -207,13 +193,11 @@ async function createContribution(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-
-    if (error.message === 'GIFT_ALREADY_FUNDED' || error.message === 'GIFT_CLOSED') {
+    
+    if (error.message === 'GIFT_ALREADY_FUNDED') {
       return res.status(409).json({
         code: 'CONFLICT',
-        message: error.message === 'GIFT_CLOSED'
-          ? 'This gift is no longer accepting contributions'
-          : 'This gift is already fully funded',
+        message: 'This gift is already fully funded',
         timestamp: new Date().toISOString()
       });
     }
@@ -225,20 +209,20 @@ async function createContribution(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-
+    
     if (error.message.startsWith('MAX_CONTRIBUTION_EXCEEDED:')) {
       const parts = error.message.split(':');
       const maxAllowed = parts[1];
       const curr = parts[2] || 'KZT';
       return res.status(400).json({
         code: 'MAX_CONTRIBUTION_EXCEEDED',
-        message: `You cannot contribute more than 80% of remaining amount (max ${formatAmount(parseInt(maxAllowed), curr)})`,
+        message: `You cannot contribute more than the remaining amount (max ${formatAmount(parseInt(maxAllowed), curr)})`,
         maxAllowed: parseInt(maxAllowed),
         currency: curr,
         timestamp: new Date().toISOString()
       });
     }
-
+    
     if (error.message.startsWith('MIN_AMOUNT:')) {
       const minStr = error.message.split(':')[1];
       return res.status(400).json({
@@ -247,24 +231,7 @@ async function createContribution(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-
-    if (error.message.startsWith('INVALID_STATE_TRANSITION') || error.message.startsWith('INVALID_TRANSITION:')) {
-      return res.status(409).json({
-        code: 'INVALID_STATE_TRANSITION',
-        message: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Handle FOR UPDATE lock conflicts (PostgreSQL error code 55P03)
-    if (error.code === '55P03' || (error.message && error.message.includes('could not obtain lock'))) {
-      return res.status(429).json({
-        code: 'LOCK_CONFLICT',
-        message: 'Too many concurrent contributions. Please try again.',
-        timestamp: new Date().toISOString()
-      });
-    }
-
+    
     res.status(500).json({
       code: 'INTERNAL_ERROR',
       message: error.message,
@@ -323,12 +290,17 @@ async function getContributionsByGift(req, res) {
 
     const totalAmount = gift.fundedAmount;
 
-    res.json({
+        res.json({
       giftId: parseInt(giftId),
       giftCurrency: gift.currency,
       totalAmount,
       totalAmountFormatted: formatAmount(totalAmount, gift.currency),
       totalContributors: total,
+   
+      handlingFlags: gift.handlingFlags || [],
+      handlingFlagsInfo: annotateFlags(gift.handlingFlags || []),
+      deliveryNote: buildDeliveryNote(gift.handlingFlags || []),
+      packagingRequirements: getPackagingRequirements(gift.handlingFlags || []),
       contributions: contributions.map(c => ({
         id: c.id,
         amount: c.amount,
@@ -338,7 +310,10 @@ async function getContributionsByGift(req, res) {
         exchangeRate: c.exchangeRateUsed,
         guestName: c.isAnonymous ? 'Anonymous' : c.guest.fullName,
         isAnonymous: c.isAnonymous,
-        timestamp: c.timestamp
+        timestamp: c.timestamp,
+        
+        lockedAt: c.lockedAt,
+        lockedRate: c.lockedRate,
       })),
       pagination: {
         page,

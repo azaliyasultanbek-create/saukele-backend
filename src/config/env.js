@@ -28,14 +28,14 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET,
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
   redisUrl: process.env.REDIS_URL,
-  // Gmail SMTP
+  
   smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
   smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
   smtpUser: process.env.SMTP_USER,
   smtpPass: process.env.SMTP_PASS,
   smtpFromEmail: process.env.SMTP_FROM_EMAIL || 'sultanbekazalia0@gmail.com',
   smtpFromName: process.env.SMTP_FROM_NAME || 'Saukele',
-  // Настройки отправителя
+  
   emailFromName: process.env.EMAIL_FROM_NAME || 'Saukele',
   frontendUrl: process.env.FRONTEND_URL,
   databasePoolMin: parseInt(process.env.DATABASE_POOL_MIN || '2', 10),

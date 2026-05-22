@@ -258,7 +258,7 @@ async function resetPasswordByToken(rawToken, newPassword) {
   await prisma.$transaction([
     prisma.user.update({
       where: { id: token.userId },
-      data: { passwordHash, emailVerified: true, emailVerifiedAt: new Date() }
+      data: { passwordHash }
     }),
     prisma.userToken.update({
       where: { id: token.id },
